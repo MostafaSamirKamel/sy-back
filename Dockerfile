@@ -23,6 +23,8 @@ RUN npm run build
 
 ENV NODE_ENV=production
 ENV PORT=5000
+ENV DATABASE_URL="file:/app/prisma/dev.db"
+ENV JWT_SECRET="synoza-jwt-default-secret-key-super-secure-2026"
 EXPOSE 5000
 
-CMD ["node", "dist/index.js"]
+CMD ["npm", "start"]

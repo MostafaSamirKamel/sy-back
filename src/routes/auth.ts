@@ -14,7 +14,7 @@ import { EGYPTIAN_MOBILE_PATTERN, isValidEgyptianMobile } from '../lib/phoneVali
 const router = Router();
 
 function signToken(user: { id: string; email: string; role: string }) {
-  const secret = process.env.JWT_SECRET!;
+  const secret = process.env.JWT_SECRET || 'synoza-jwt-default-secret-key-super-secure-2026';
   const expiresIn = (process.env.JWT_EXPIRES_IN || '365d') as jwt.SignOptions['expiresIn'];
   return jwt.sign({ id: user.id, email: user.email, role: user.role }, secret, {
     expiresIn,
