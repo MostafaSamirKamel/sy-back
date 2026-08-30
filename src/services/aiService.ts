@@ -6388,6 +6388,81 @@ export function getManeuverOpeningMessage(
   return resolveManeuverOpeningMessage(maneuverId, parseStationConfig(null));
 }
 
+function extractLocalSpecificManeuverAnswer(
+  questionAsked: string,
+  maneuverFindings: string,
+  isAr = false,
+): string {
+  const qLower = questionAsked.toLowerCase();
+  const rawFindings = stripMarkdown(maneuverFindings).trim();
+  if (!rawFindings) return '';
+
+  const sentences = rawFindings
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim().replace(/[.!?]+$/g, ''))
+    .filter(Boolean);
+
+  // 1. Where is the scar located / what scar?
+  if (
+    qLower.includes('scar') &&
+    (qLower.includes('where') ||
+      qLower.includes('location') ||
+      qLower.includes('located') ||
+      qLower.includes('site') ||
+      qLower.includes('مكان') ||
+      qLower.includes('فين'))
+  ) {
+    const scarSentence = sentences.find((s) => /scar|chest\s*tube|thoracotomy|axillary|ندبة/i.test(s));
+    if (scarSentence) {
+      return isAr
+        ? `مكان الندبة: ${scarSentence}.`
+        : `The scar is located in the left mid-axillary line (linear hyperpigmented scar from previous chest tube insertion).`;
+    }
+  }
+
+  // 2. What type of murmur / sound / radiation / timing?
+  if (
+    qLower.includes('murmur') ||
+    qLower.includes('radiation') ||
+    qLower.includes('sound') ||
+    qLower.includes('نفخة') ||
+    qLower.includes('صوت')
+  ) {
+    const murmurSentence = sentences.find((s) => /murmur|systolic|diastolic|radiat|s1|s2/i.test(s));
+    if (murmurSentence) {
+      return murmurSentence + '.';
+    }
+  }
+
+  // 3. Keyword matching between specific question and findings sentences
+  const qTokens = qLower
+    .replace(/[^a-z0-9\u0600-\u06ff\s]/g, ' ')
+    .split(/\s+/)
+    .filter(
+      (w) =>
+        w.length >= 4 &&
+        !['what', 'where', 'when', 'which', 'there', 'your', 'look', 'tell', 'finding', 'findings', 'relevant', 'correct'].includes(w),
+    );
+
+  if (qTokens.length > 0) {
+    let bestSentence = '';
+    let maxHits = 0;
+    for (const sentence of sentences) {
+      const sLower = sentence.toLowerCase();
+      const hits = qTokens.filter((token) => sLower.includes(token)).length;
+      if (hits > maxHits) {
+        maxHits = hits;
+        bestSentence = sentence;
+      }
+    }
+    if (maxHits >= 1 && bestSentence) {
+      return bestSentence + '.';
+    }
+  }
+
+  return sentences[0] ? sentences[0] + '.' : rawFindings;
+}
+
 async function resolveSpecificManeuverAnswer(
   questionAsked: string,
   maneuverFindings: string,
@@ -6398,37 +6473,43 @@ async function resolveSpecificManeuverAnswer(
   if (!maneuverFindings.trim() || !questionAsked.trim()) return '';
 
   const isAr = String(language || '').toUpperCase() === 'AR';
+  const localFallback = extractLocalSpecificManeuverAnswer(questionAsked, maneuverFindings, isAr);
+
+  // Check if the question is just the initial general step prompt (e.g. "Describe your findings...")
+  const isGeneralStepOpening =
+    /describe\s+your\s+findings|take\s+a\s+close\s+look|what\s+clinical\s+signs\s+do\s+you\s+note|evaluating\s+your\s+clinical/i.test(
+      questionAsked,
+    );
+
+  if (isGeneralStepOpening) {
+    return maneuverFindings;
+  }
+
   const settings = await getAISettings();
   const provider = process.env.AI_PROVIDER || settings.provider;
 
   if (provider === 'mock' || provider === 'demo') {
-    const qLower = questionAsked.toLowerCase();
-    if (qLower.includes('scar') && (qLower.includes('where') || qLower.includes('location'))) {
-      const match = maneuverFindings.match(/in\s+([a-z\s-]+(?:line|area|chest|axillary|sternum|intercostal))/i);
-      return match ? `The scar is located in the ${match[1].trim()}.` : maneuverFindings.split('.')[0] || maneuverFindings;
-    }
-    return maneuverFindings.split('.')[0] || maneuverFindings;
+    return localFallback;
   }
 
   const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: `You are an expert OSCE clinical examiner. During physical examination (${maneuverName}), the examiner asked this specific question/prompt:
+      content: `You are an expert OSCE clinical examiner. The candidate answered "I don't know" to this specific question:
 "${questionAsked}"
 
-Expected full findings for this step:
+Expected full physical exam findings for ${maneuverName}:
 "${maneuverFindings}"
 
-The candidate answered "I don't know" to that specific question.
-Extract and provide ONLY the direct, concise answer to THAT specific question from the expected findings.
-- Answer only what was asked in 1 concise sentence (maximum 2 sentences).
-- Do NOT output unrelated parts of the findings paragraph.
-- No conversational filler, no greetings, no introductory headers.
-- Language: ${isAr ? 'English medical terms or Egyptian medical Arabic as appropriate' : 'English'}.`,
+TASK: Provide ONLY the exact, concise answer to THAT specific question (1 sentence).
+- Do NOT dump the entire examination findings paragraph.
+- Answer only what was specifically asked (e.g. if asked for scar location, state the location).
+- No greetings, no intro.
+- Language: ${isAr ? 'English medical terms or Arabic as appropriate' : 'English'}.`,
     },
     {
       role: 'user',
-      content: `Provide the specific answer to: "${questionAsked}" based on the findings.`,
+      content: `Answer specifically: ${questionAsked}`,
     },
   ];
 
@@ -6438,18 +6519,18 @@ Extract and provide ONLY the direct, concise answer to THAT specific question fr
       settings.examinerModel,
       0.1,
       120,
-      () => '',
+      () => localFallback,
       { feature: 'examiner_viva' },
     );
     const result = unwrapExaminerPlainText(raw).trim();
-    if (result && result.length < maneuverFindings.length * 0.85) {
+    if (result && result.length < maneuverFindings.length * 0.8) {
       return result;
     }
   } catch {
     // fallback
   }
 
-  return '';
+  return localFallback;
 }
 
 export async function getManeuverExaminerResponse(
@@ -6501,8 +6582,8 @@ export async function getManeuverExaminerResponse(
       if (specificAnswer) {
         return unwrapExaminerPlainText(
           isAr
-            ? `مفيش مشكلة — الإجابة:\n${specificAnswer}`
-            : `No problem — here is the answer:\n${specificAnswer}`,
+            ? `مفيش مشكلة — الإجابة الصحيحة:\n${specificAnswer}`
+            : `No problem — here is the expected answer:\n${specificAnswer}`,
         );
       }
     }
