@@ -60,27 +60,28 @@ const configuredOrigins = (process.env.CLIENT_URL || "")
   .map((u) => u.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      const normalized = origin.replace(/\/$/, "");
-      if (
-        configuredOrigins.length === 0 ||
-        configuredOrigins.includes(normalized) ||
-        normalized.includes("localhost") ||
-        normalized.includes("127.0.0.1") ||
-        normalized.endsWith(".vercel.app")
-      ) {
-        return callback(null, true);
-      }
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const normalized = origin.replace(/\/$/, "");
+    if (
+      configuredOrigins.length === 0 ||
+      configuredOrigins.includes(normalized) ||
+      normalized.includes("localhost") ||
+      normalized.includes("127.0.0.1") ||
+      normalized.endsWith(".vercel.app")
+    ) {
       return callback(null, true);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-  }),
-);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
 
