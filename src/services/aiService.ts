@@ -912,10 +912,10 @@ const CHAT_PATIENT_MULTI_MAX_TOKENS = 360;
 const CHAT_EXAMINER_MAX_TOKENS = 64;
 const VOICE_PATIENT_MAX_TOKENS = 96;
 /** Live voice AI budget — long enough for a complete short reply without mid-sentence cuts. */
-const VOICE_TIMEOUT_MS = 3500;
-/** Non-voice chat: allow a bit more time for multi-part answers. */
-const CHAT_TIMEOUT_MS = 3500;
-const CHAT_MULTI_TIMEOUT_MS = 5500;
+const VOICE_TIMEOUT_MS = 15000;
+/** Non-voice chat: allow enough time for complete clinical reasoning and generation. */
+const CHAT_TIMEOUT_MS = 25000;
+const CHAT_MULTI_TIMEOUT_MS = 35000;
 
 function chatContextWindow(history: { role: string; content: string }[], maxMessages: number, voiceTurn = false) {
   return contextWindow(history, Math.min(maxMessages, voiceTurn ? VOICE_CONTEXT_CAP : CHAT_CONTEXT_CAP));
@@ -951,7 +951,7 @@ function chatPatientModel(settings: Awaited<ReturnType<typeof getAISettings>>): 
     process.env.OPENAI_PATIENT_MODEL ||
     process.env.OPENAI_MODEL ||
     settings.examinerModel ||
-    'gpt-4o-mini'
+    'openai/gpt-4o-mini'
   );
 }
 
@@ -960,6 +960,7 @@ function extractCompletionText(response: ChatCompletion): string {
 }
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const DEFAULT_OPENROUTER_KEY = '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';
 
 function isOpenRouterProvider(provider: string): boolean {
   return /^open.?router$/i.test(provider.trim());
@@ -967,17 +968,18 @@ function isOpenRouterProvider(provider: string): boolean {
 
 async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettingsCached>>) {
   const cfg = settings ?? (await getAISettingsCached());
-  const provider = (process.env.AI_PROVIDER || cfg.provider || 'openai').toLowerCase();
+  const provider = (process.env.AI_PROVIDER || cfg.provider || 'openrouter').toLowerCase();
+  const openRouterKey =
+    process.env.OPENROUTER_API_KEY?.trim() ||
+    cfg.openRouterApiKey?.trim() ||
+    DEFAULT_OPENROUTER_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY?.trim();
 
-  if (isOpenRouterProvider(provider)) {
-    const apiKey =
-      process.env.OPENROUTER_API_KEY?.trim() ||
-      cfg.openRouterApiKey?.trim() ||
-      '';
-    if (!apiKey) throw new Error('OPENROUTER_API_KEY not configured');
+  if (isOpenRouterProvider(provider) || (openRouterKey && !openAiKey)) {
+    if (!openRouterKey) throw new Error('OPENROUTER_API_KEY not configured');
     return {
       client: new OpenAI({
-        apiKey,
+        apiKey: openRouterKey,
         baseURL: OPENROUTER_BASE_URL,
         defaultHeaders: {
           'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://medsynoza.com',
@@ -992,13 +994,30 @@ async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettin
     };
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
-  return {
-    client: new OpenAI({ apiKey }),
-    provider: 'openai' as const,
-    fallbackModel: process.env.OPENAI_FALLBACK_MODEL || 'gpt-4o-mini',
-  };
+  if (openAiKey) {
+    return {
+      client: new OpenAI({ apiKey: openAiKey }),
+      provider: 'openai' as const,
+      fallbackModel: process.env.OPENAI_FALLBACK_MODEL || 'gpt-4o-mini',
+    };
+  }
+
+  if (openRouterKey) {
+    return {
+      client: new OpenAI({
+        apiKey: openRouterKey,
+        baseURL: OPENROUTER_BASE_URL,
+        defaultHeaders: {
+          'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://medsynoza.com',
+          'X-Title': process.env.OPENROUTER_APP_NAME || 'Synoza OSCE',
+        },
+      }),
+      provider: 'openrouter' as const,
+      fallbackModel: 'openai/gpt-4o-mini',
+    };
+  }
+
+  throw new Error('No AI API key configured');
 }
 
 async function callOpenAI(
@@ -1866,7 +1885,7 @@ function asksAboutSymptoms(text: string): boolean {
   }
   // Do NOT block when the same message also asks name/age — collective OSCE
   // questions routinely mix demographics with the chief complaint.
-  return /why|what brought|what brings|present|complain|symptom|problem|chief|feel|wrong|happening|issue|breath|dyspnea|swell|pain|chest|tell me about|describe|history of|ليه|سبب|شكو|شكوى|شكواك|شكوتك|شكوايتك|بتشتكي|بتشكو|تشتكي|اشتكي|اشتكيت|بتشكو|احكي(?:لي)?|عرض|وجع|ألم|الم|ضيق|تنفس|تورم|حاس|حاسس|بتعاني|تعاني من|مشكل|إيه اللي جابك|إيه الحاجة|الحاجة اللي|إيه المشكلة|إيه مشكل|إيه جابك|جابك هنا|جيت ليه|ليه جيت|جاي.*ليه|تعبك|تعبان.*إيه|وديجتي|ودجتي|وش جيت|عندك إيه|عندك ايه|إيه اللي عندك|ما الذي|شكو.*من|بتشتكي\s*من|تشتكي\s*من|what.*wrong|what.*problem|what.*matter|what.*complain|الحكاية|القصة|بدأت|اتطورت|ازاي\s*بدأت/i.test(
+  return /why|what brought|what brings|present|complain|symptom|problem|chief|feel|wrong|happening|issue|breath|dyspnea|swell|pain|chest|tell me about|describe|history of|ليه|سبب|شكو|شكوى|شكواك|شكوتك|شكوايتك|بتشتكي|بتشكو|تشتكي|اشتكي|اشتكيت|بتشكو|احكي(?:لي)?|عرض|وجع|ألم|الم|ضيق|تنفس|تورم|حاس|حاسس|بتعاني|تعاني من|مشكل|(?:إيه|ايه|اي|أيه)\s*(?:اللي|اللى|الي)?\s*(?:جابك|تعبك|حصل|مشكلتك|مضايقك)|إيه الحاجة|الحاجة اللي|إيه المشكلة|إيه مشكل|إيه جابك|اي جابك|ايه جابك|جابك هنا|جيت ليه|ليه جيت|جاي.*ليه|تعبك|تعبان.*(?:إيه|ايه|اي)|مالك|فيك\s*(?:ايه|إيه|اي)|وديجتي|ودجتي|وش جيت|عندك إيه|عندك ايه|عندك اي|إيه اللي عندك|ما الذي|شكو.*من|بتشتكي\s*من|تشتكي\s*من|what.*wrong|what.*problem|what.*matter|what.*complain|الحكاية|القصة|بدأت|اتطورت|ازاي\s*بدأت|سبب\s*(?:الزيارة|الزياره|مجيئك|جيتك)/i.test(
     text,
   );
 }
@@ -4390,7 +4409,7 @@ export async function getPatientResponse(
       userId: options?.userId,
       sessionId: options?.sessionId,
     },
-    { timeoutMs: voiceTurn ? VOICE_TIMEOUT_MS : chatTimeout, stream: true },
+    { timeoutMs: voiceTurn ? VOICE_TIMEOUT_MS : chatTimeout, stream: voiceTurn },
   );
 
   const sanitized = sanitizePatientResponse(
