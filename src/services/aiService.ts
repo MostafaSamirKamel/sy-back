@@ -3587,6 +3587,262 @@ function mockPatientResponse(
   return fallbacks[studentTurn % fallbacks.length];
 }
 
+export function buildRealtimePatientInstructions(caseData: Case, sessionLanguage: string): string {
+  const lang: Language = sessionLanguage === 'EN' ? 'EN' : 'AR';
+  const structuredContext = [
+    ['Sex', caseData.patientGender], ['Nationality', caseData.patientNationality],
+    ['Birthplace', caseData.patientBirthPlace], ['Residence', caseData.patientResidence],
+    ['Occupation', caseData.patientOccupation], ['Marital status', caseData.patientMaritalStatus],
+    ['Smoking', caseData.patientSmokingStatus], ['Alcohol', caseData.patientAlcoholStatus],
+    ['Medication history', caseData.medicationHistory], ['Family history', caseData.familyHistory],
+    ['Social history', caseData.socialHistory], ['Surgical history', caseData.surgicalHistory],
+  ].map(([label, value]) => `- ${label}: ${String(value || 'Not specified — make a realistic, safe assumption in character if asked')}`).join('\n');
+  if (lang === 'EN') {
+    return `You are ${caseData.patientName}, a ${caseData.patientAge}-year-old PATIENT in an OSCE voice call. You are NOT the doctor. You NEVER interview or examine the doctor.
+
+Background (only if asked about that specific topic):
+- Chief complaint: ${caseData.chiefComplaint}
+- History: ${caseData.medicalHistory}
+${structuredContext}
+
+STRICT RULES:
+1. Wait for the doctor's question, then answer naturally.
+2. NEVER ask the doctor any question. Forbidden: "can you tell me", "does it increase when", "what happens when you", "do you have".
+3. Greeting or "how are you" ONLY → "Not great, doctor." or "Hello doctor." — NO symptoms, NO history.
+4. Do not volunteer symptoms, age, name, or complaints unless directly asked about that topic.
+5. Never reveal or guess any diagnosis.
+6. Structured facts above are authoritative. If a personal detail is not specified, make a realistic safe assumption (e.g. non-smoker, no alcohol, lives in Cairo, single if young). Never say "I don't remember" or "I'm not sure" for personal questions.
+7. First open complaint question: give only the brief chief complaint. Give detail only after a focused follow-up.
+8. CRITICAL: If the doctor asks MULTIPLE questions in ONE message (e.g. name + age + residence + complaint + smoking), answer ALL of them in ONE natural reply. Never skip any question or answer only the first one.`;
+  }
+
+  return `أنت ${caseData.patientName}، مريض/ة مصري/ة عمرك ${caseData.patientAge} سنة. أنت المريض فقط — مش الدكتور ومش الممتحن ومش بتعمل مقابلة طبية.
+
+الخلفية (ممنوع تذكرها إلا لو الدكتور سأل عن نفس الموضوع بالتحديد):
+- الشكوى: ${caseData.chiefComplaint}
+- التاريخ: ${caseData.medicalHistory}
+${structuredContext}
+
+قواعد صارمة للمكالمة الصوتية:
+1. استنى سؤال الدكتور، وبعدين أجب بشكل طبيعي بالعامية المصرية (Egyptian colloquial Arabic) فقط.
+2. ممنوع تسأل الدكتور أي سؤال. ممنوع تماماً: "ممكن تحكيلي"، "قولي إيه"، "قولّي إيه"، "قولي بالظبط"، "تحكيلي"، "هل عندك"، "عندك كحة"، "لما تتحرك"، "فهمني أكتر"، "توضح".
+3. تحية أو "إزيك" أو "إيه الأخبار" أو "عامل إيه" → رد بس: "مش في أحسن حالي دكتور." أو "أهلاً دكتور." — ممنوع تذكر أعراض أو شكوى أو مدة المرض.
+4. ممنوع تتكلم من نفسك أو تعرض حالتك أو تسأل الدكتور عن أعراضه — أنت المريض بس.
+5. ممنوع الفصحى والإنجليزي. ممنوع تقول أو تخمن أي تشخيص.
+6. البيانات المنظمة أعلاه هي المصدر الرئيسي للحقيقة؛ لو حاجة شخصية مش مكتوبة (سكن، وظيفة، تدخين) افترض افتراض واقعي ومنطقي (مش بدخن، عايش في القاهرة، أعزب لو شاب). ممنوع تقول "مش فاكر" أو "مش متأكد" في الأسئلة الشخصية. الأعراض والتاريخ المرضي لازم من بيانات الحالة فقط.
+7. أول سؤال مفتوح عن الشكوى: اذكر الشكوى باختصار فقط. التفاصيل بعد سؤال متابعة محدد.
+8. مهم جداً: لو الدكتور سأل أكتر من سؤال في رسالة واحدة (مثلاً: اسمك + عمرك + ساكن فين + الشكوى + بتدخن) جاوب عليهم كلهم في رد واحد طبيعي. ممنوع تتجاهل أي سؤال أو تجاوب على أول واحد بس.`;
+}
+
+function patientActingAsDoctor(text: string): boolean {
+  return /ممكن تحكيلي|قولي إيه|قولّي إيه|قولي بالظبط|تحكيلي|هل عندك|عندك كحة|لما تتحرك|لما تتعب|tell me if|can you tell|what happens when|do you have|when you move/i.test(
+    text,
+  );
+}
+
+function stripDoctorQuestionsFromPatient(text: string): string {
+  const withoutQuestions = text
+    .split(/[؟?]/)
+    .map((part) => part.trim())
+    .filter((part) => part && !patientActingAsDoctor(part))
+    .join('. ')
+    .trim();
+  return withoutQuestions || text.split(/[؟?]/)[0]?.trim() || text;
+}
+
+/** Post-process OpenAI Realtime patient audio transcript using the same rules as text chat. */
+export function sanitizeRealtimePatientTranscript(
+  caseData: Case,
+  studentMessage: string,
+  patientTranscript: string,
+  sessionLanguage: string,
+): string {
+  const lang: Language = sessionLanguage === 'EN' ? 'EN' : 'AR';
+  if (isGreetingOnly(studentMessage) || isDoctorIntroduction(studentMessage) || /إيه\s*الأخبار|ايه\s*الاخبار|السلام\s*عليكم/i.test(studentMessage)) {
+    const deterministic = getDeterministicPatientResponse(caseData, studentMessage, lang, [], true);
+    if (deterministic) return deterministic;
+  }
+  let text = sanitizePatientResponse(caseData, studentMessage, patientTranscript, lang, true);
+
+  if (patientActingAsDoctor(text)) {
+    if (asksAboutSymptoms(studentMessage)) {
+      text = stripDoctorQuestionsFromPatient(text);
+    } else {
+      text = lang === 'AR' ? 'مش فاهم قصدك دكتور.' : "I don't understand, doctor.";
+    }
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed) {
+    const retry = getDeterministicPatientResponse(caseData, studentMessage, lang, [], true);
+    if (retry) return retry;
+    return lang === 'AR' ? 'مش فاهم، ممكن توضّح سؤالك؟' : 'Could you clarify your question?';
+  }
+  return trimmed;
+}
+
+export async function getPatientResponse(
+  caseData: Case,
+  history: { role: string; content: string }[],
+  userMessage: string,
+  language: Language,
+  options?: {
+    voiceTurn?: boolean;
+    userId?: string;
+    sessionId?: string;
+    stationConfig?: StationConfig | null;
+    patientBehavior?: PatientBehavior | null;
+  },
+): Promise<string> {
+  const normalizedMessage = normalizeStudentMessage(userMessage, language);
+  const lang = effectivePatientLanguage(language, normalizedMessage);
+  const voiceTurn = !!options?.voiceTurn;
+  const studentTurn = history.filter((m) => m.role === 'STUDENT').length;
+  const patientBehavior =
+    options?.patientBehavior ??
+    options?.stationConfig?.patientBehavior ??
+    null;
+
+  const [customPatientKnowledge, settings] = await Promise.all([
+    hasPatientAiKnowledge({
+      caseId: caseData.id,
+      categoryId: caseData.categoryId,
+    }),
+    getAISettingsCached(),
+  ]);
+
+  const provider = (process.env.AI_PROVIDER || settings.provider || 'openrouter').toLowerCase();
+
+  if (provider === 'mock' || provider === 'demo') {
+    if (
+      isGreetingOnly(normalizedMessage) &&
+      !asksAboutSymptoms(normalizedMessage) &&
+      !asksWellbeing(normalizedMessage)
+    ) {
+      const greeting = patientGreetingOnlyReply(
+        caseData,
+        resolvePatientLanguage(lang, normalizedMessage),
+        normalizedMessage,
+      );
+      return finalizePatientReply(caseData, normalizedMessage, greeting, lang, history, voiceTurn);
+    }
+
+    const deterministic = getDeterministicPatientResponse(
+      caseData,
+      normalizedMessage,
+      lang,
+      history,
+      voiceTurn,
+    );
+    if (deterministic !== null) {
+      return finalizePatientReply(
+        caseData,
+        normalizedMessage,
+        deterministic,
+        lang,
+        history,
+        voiceTurn,
+      );
+    }
+
+    return finalizePatientReply(
+      caseData,
+      normalizedMessage,
+      mockPatientResponse(caseData, normalizedMessage, lang, history),
+      lang,
+      history,
+      voiceTurn,
+    );
+  }
+
+  const multiPart = !voiceTurn && isMultiPartPatientQuestion(normalizedMessage);
+
+  const knowledgeContext = await getRoleKnowledgeContext({
+    categoryId: caseData.categoryId,
+    caseId: caseData.id,
+    role: 'patient',
+  });
+  const promptHistory = chatContextWindow(history, settings.maxContextMessages, voiceTurn);
+  const multiPartRule = multiPart
+    ? `\nMULTI-QUESTION MESSAGE: The doctor asked several questions in the same turn. Answer EVERY distinct question and clinical sub-question in one natural reply. This includes demographics AND clinical history such as onset, duration, triggers, relieving factors, associated symptoms, orthopnea/PND, edema, medications, past illnesses, hypertension, diabetes, allergies, family history, smoking and alcohol when asked. Do not choose only one "main" question and ignore the others. Answer only from the configured case background and approved patient knowledge; never invent missing medical facts. Stay fully in the session language and keep the reply natural rather than turning it into a checklist.${
+        lang === 'AR'
+          ? '\nتنبيه فائق الأهمية: الدكتور سأل عدة أسئلة في نفس الرسالة (الاسم، السن، مكان الولادة، السكن، الوظيفة، الزواج، التدخين، الكحوليات، أو أي أسئلة أخرى). يجب عليك الإجابة على كل سؤال من هذه الأسئلة بالكامل في ردك هذا دون أن تفوت أي سؤال إطلاقاً، واجمعها كلها في إجابة واحدة متكاملة ومترابطة بالعامية المصرية.'
+          : ''
+      }`
+    : '';
+  const systemPrompt =
+    buildPatientSystemPrompt(
+      caseData,
+      lang,
+      knowledgeContext,
+      voiceTurn,
+      studentTurn,
+      patientBehavior,
+    ) +
+    multiPartRule +
+    adminSystemPromptSuffix(settings, lang, 'patient');
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    ...promptHistory.map((m) => ({
+      role: (m.role === 'STUDENT' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.content,
+    })),
+    { role: 'user', content: normalizedMessage },
+  ];
+
+  const voiceModel =
+    process.env.OPENAI_VOICE_MODEL ||
+    process.env.OPENAI_PATIENT_MODEL ||
+    'gpt-4o-mini';
+  const activeModel = voiceTurn ? voiceModel : chatPatientModel(settings);
+  const maxTokens = voiceTurn
+    ? VOICE_PATIENT_MAX_TOKENS
+    : Math.min(
+        Math.max(settings.maxTokens, multiPart ? CHAT_PATIENT_MULTI_MAX_TOKENS : CHAT_PATIENT_MAX_TOKENS),
+        multiPart ? CHAT_PATIENT_MULTI_MAX_TOKENS : CHAT_PATIENT_MAX_TOKENS,
+      );
+  const temperature = voiceTurn ? 0.3 : Math.min(Math.max(settings.temperature, 0.45), 0.65);
+  const chatTimeout = multiPart ? CHAT_MULTI_TIMEOUT_MS : CHAT_TIMEOUT_MS;
+
+  const raw = await callOpenAISafe(
+    messages,
+    activeModel,
+    temperature,
+    maxTokens,
+    () =>
+      voiceTurn
+        ? (lang === 'EN' ? 'Sorry, could you clarify?' : 'مش فاهم، ممكن توضّح سؤالك؟')
+        : mockPatientResponse(caseData, normalizedMessage, lang, history),
+    {
+      feature: voiceTurn ? 'realtime' : 'patient_chat',
+      userId: options?.userId,
+      sessionId: options?.sessionId,
+    },
+    { timeoutMs: voiceTurn ? VOICE_TIMEOUT_MS : chatTimeout, stream: voiceTurn },
+  );
+
+  const sanitized = sanitizePatientResponse(
+    caseData,
+    normalizedMessage,
+    raw,
+    lang,
+    voiceTurn,
+  );
+  const finalized = finalizePatientReply(
+    caseData,
+    normalizedMessage,
+    sanitized,
+    lang,
+    history,
+    voiceTurn,
+  );
+  const trimmed = finalized.trim();
+  if (!trimmed) {
+    return lang === 'AR' ? 'مش فاهم، ممكن توضّح سؤالك؟' : 'Could you clarify your question?';
+  }
+  return trimmed;
+}
+
 function buildZeroParticipationEvaluation(
   caseData: Case,
   messages: SessionMessage[],
@@ -4126,267 +4382,6 @@ export async function getExaminerEvaluation(
   }
 
   return mockResult;
-}
-
-export function buildRealtimePatientInstructions(caseData: Case, sessionLanguage: string): string {
-  const lang: Language = sessionLanguage === 'EN' ? 'EN' : 'AR';
-  const structuredContext = [
-    ['Sex', caseData.patientGender], ['Nationality', caseData.patientNationality],
-    ['Birthplace', caseData.patientBirthPlace], ['Residence', caseData.patientResidence],
-    ['Occupation', caseData.patientOccupation], ['Marital status', caseData.patientMaritalStatus],
-    ['Smoking', caseData.patientSmokingStatus], ['Alcohol', caseData.patientAlcoholStatus],
-    ['Medication history', caseData.medicationHistory], ['Family history', caseData.familyHistory],
-    ['Social history', caseData.socialHistory], ['Surgical history', caseData.surgicalHistory],
-  ].map(([label, value]) => `- ${label}: ${String(value || 'Not specified — make a realistic, safe assumption in character if asked')}`).join('\n');
-  if (lang === 'EN') {
-    return `You are ${caseData.patientName}, a ${caseData.patientAge}-year-old PATIENT in an OSCE voice call. You are NOT the doctor. You NEVER interview or examine the doctor.
-
-Background (only if asked about that specific topic):
-- Chief complaint: ${caseData.chiefComplaint}
-- History: ${caseData.medicalHistory}
-${structuredContext}
-
-STRICT RULES:
-1. Wait for the doctor's question, then answer naturally.
-2. NEVER ask the doctor any question. Forbidden: "can you tell me", "does it increase when", "what happens when you", "do you have".
-3. Greeting or "how are you" ONLY → "Not great, doctor." or "Hello doctor." — NO symptoms, NO history.
-4. Do not volunteer symptoms, age, name, or complaints unless directly asked about that topic.
-5. Never reveal or guess any diagnosis.
-6. Structured facts above are authoritative. If a personal detail is not specified, make a realistic safe assumption (e.g. non-smoker, no alcohol, lives in Cairo, single if young). Never say "I don't remember" or "I'm not sure" for personal questions.
-7. First open complaint question: give only the brief chief complaint. Give detail only after a focused follow-up.
-8. CRITICAL: If the doctor asks MULTIPLE questions in ONE message (e.g. name + age + residence + complaint + smoking), answer ALL of them in ONE natural reply. Never skip any question or answer only the first one.`;
-  }
-
-    return `أنت ${caseData.patientName}، مريض/ة مصري/ة عمرك ${caseData.patientAge} سنة. أنت المريض فقط — مش الدكتور ومش الممتحن ومش بتعمل مقابلة طبية.
-
-الخلفية (ممنوع تذكرها إلا لو الدكتور سأل عن نفس الموضوع بالتحديد):
-- الشكوى: ${caseData.chiefComplaint}
-- التاريخ: ${caseData.medicalHistory}
-${structuredContext}
-
-قواعد صارمة للمكالمة الصوتية:
-1. استنى سؤال الدكتور، وبعدين أجب بشكل طبيعي بالعامية المصرية (Egyptian colloquial Arabic) فقط.
-2. ممنوع تسأل الدكتور أي سؤال. ممنوع تماماً: "ممكن تحكيلي"، "قولي إيه"، "هل عندك"، "لما تتحرك"، "فهمني أكتر"، "توضح".
-3. تحية أو "إزيك" أو "إيه الأخبار" أو "عامل إيه" → رد بس: "مش في أحسن حالي دكتور." أو "أهلاً دكتور." — ممنوع تذكر أعراض أو شكوى أو مدة المرض.
-4. ممنوع تتكلم من نفسك أو تعرض حالتك أو تسأل الدكتور عن أعراضه — أنت المريض بس.
-5. ممنوع الفصحى والإنجليزي. ممنوع تقول أو تخمن أي تشخيص.
-6. البيانات المنظمة أعلاه هي المصدر الرئيسي للحقيقة؛ لو حاجة شخصية مش مكتوبة (سكن، وظيفة، تدخين) افترض افتراض واقعي ومنطقي (مش بدخن، عايش في القاهرة، أعزب لو شاب). ممنوع تقول "مش فاكر" أو "مش متأكد" في الأسئلة الشخصية. الأعراض والتاريخ المرضي لازم من بيانات الحالة فقط.
-7. أول سؤال مفتوح عن الشكوى: اذكر الشكوى باختصار فقط. التفاصيل بعد سؤال متابعة محدد.
-8. مهم جداً: لو الدكتور سأل أكتر من سؤال في رسالة واحدة (مثلاً: اسمك + عمرك + ساكن فين + الشكوى + بتدخن) جاوب عليهم كلهم في رد واحد طبيعي. ممنوع تتجاهل أي سؤال أو تجاوب على أول واحد بس.`;
-}
-
-function patientActingAsDoctor(text: string): boolean {
-  return /ممكن تحكيلي|قولي إيه|قولّي إيه|قولي بالظبط|تحكيلي|هل عندك|عندك كحة|لما تتحرك|لما تتعب|tell me if|can you tell|what happens when|do you have|when you move/i.test(
-    text,
-  );
-}
-
-function stripDoctorQuestionsFromPatient(text: string): string {
-  const withoutQuestions = text
-    .split(/[؟?]/)
-    .map((part) => part.trim())
-    .filter((part) => part && !patientActingAsDoctor(part))
-    .join('. ')
-    .trim();
-  return withoutQuestions || text.split(/[؟?]/)[0]?.trim() || text;
-}
-
-/** Post-process OpenAI Realtime patient audio transcript using the same rules as text chat. */
-export function sanitizeRealtimePatientTranscript(
-  caseData: Case,
-  studentMessage: string,
-  patientTranscript: string,
-  sessionLanguage: string,
-): string {
-  const lang: Language = sessionLanguage === 'EN' ? 'EN' : 'AR';
-  // Provider audio can contain an accidental follow-up question. Preserve the
-  // deterministic social/greeting safeguards before accepting that transcript.
-  if (isGreetingOnly(studentMessage) || isDoctorIntroduction(studentMessage) || /إيه\s*الأخبار|ايه\s*الاخبار|السلام\s*عليكم/i.test(studentMessage)) {
-    const deterministic = getDeterministicPatientResponse(caseData, studentMessage, lang, [], true);
-    if (deterministic) return deterministic;
-  }
-  // Keep realtime voice aligned with core patient rules by preserving the model
-  // answer whenever it is usable, instead of overriding with canned text.
-  let text = sanitizePatientResponse(caseData, studentMessage, patientTranscript, lang, true);
-
-  if (patientActingAsDoctor(text)) {
-    if (asksAboutSymptoms(studentMessage)) {
-      text = stripDoctorQuestionsFromPatient(text);
-    } else {
-      text = lang === 'AR' ? 'مش فاهم قصدك دكتور.' : "I don't understand, doctor.";
-    }
-  }
-
-  const trimmed = text.trim();
-  if (!trimmed) {
-    const retry = getDeterministicPatientResponse(caseData, studentMessage, lang, [], true);
-    if (retry) return retry;
-    return lang === 'AR' ? 'مش فاهم، ممكن توضّح سؤالك؟' : 'Could you clarify your question?';
-  }
-  return trimmed;
-}
-
-export async function getPatientResponse(
-  caseData: Case,
-  history: { role: string; content: string }[],
-  userMessage: string,
-  language: Language,
-  options?: {
-    voiceTurn?: boolean;
-    userId?: string;
-    sessionId?: string;
-    stationConfig?: StationConfig | null;
-    patientBehavior?: PatientBehavior | null;
-  },
-): Promise<string> {
-  const normalizedMessage = normalizeStudentMessage(userMessage, language);
-  const lang = effectivePatientLanguage(language, normalizedMessage);
-  const voiceTurn = !!options?.voiceTurn;
-  const studentTurn = history.filter((m) => m.role === 'STUDENT').length;
-  const patientBehavior =
-    options?.patientBehavior ??
-    options?.stationConfig?.patientBehavior ??
-    null;
-
-  const [customPatientKnowledge, settings] = await Promise.all([
-    hasPatientAiKnowledge({
-      caseId: caseData.id,
-      categoryId: caseData.categoryId,
-    }),
-    getAISettingsCached(),
-  ]);
-
-  const provider = (process.env.AI_PROVIDER || settings.provider || 'openrouter').toLowerCase();
-
-  if (provider === 'mock' || provider === 'demo') {
-    // Pure greetings in mock mode
-    if (
-      isGreetingOnly(normalizedMessage) &&
-      !asksAboutSymptoms(normalizedMessage) &&
-      !asksWellbeing(normalizedMessage)
-    ) {
-      const greeting = patientGreetingOnlyReply(
-        caseData,
-        resolvePatientLanguage(lang, normalizedMessage),
-        normalizedMessage,
-      );
-      return finalizePatientReply(caseData, normalizedMessage, greeting, lang, history, voiceTurn);
-    }
-
-    const deterministic = getDeterministicPatientResponse(
-      caseData,
-      normalizedMessage,
-      lang,
-      history,
-      voiceTurn,
-    );
-    if (deterministic !== null) {
-      return finalizePatientReply(
-        caseData,
-        normalizedMessage,
-        deterministic,
-        lang,
-        history,
-        voiceTurn,
-      );
-    }
-
-    return finalizePatientReply(
-      caseData,
-      normalizedMessage,
-      mockPatientResponse(caseData, normalizedMessage, lang, history),
-      lang,
-      history,
-      voiceTurn,
-    );
-  }
-
-  const multiPart = !voiceTurn && isMultiPartPatientQuestion(normalizedMessage);
-
-  const knowledgeContext = await getRoleKnowledgeContext({
-    categoryId: caseData.categoryId,
-    caseId: caseData.id,
-    role: 'patient',
-  });
-  const promptHistory = chatContextWindow(history, settings.maxContextMessages, voiceTurn);
-  const multiPartRule = multiPart
-    ? `\nMULTI-QUESTION MESSAGE: The doctor asked several questions in the same turn. Answer EVERY distinct question and clinical sub-question in one natural reply. This includes demographics AND clinical history such as onset, duration, triggers, relieving factors, associated symptoms, orthopnea/PND, edema, medications, past illnesses, hypertension, diabetes, allergies, family history, smoking and alcohol when asked. Do not choose only one "main" question and ignore the others. Answer only from the configured case background and approved patient knowledge; never invent missing medical facts. Stay fully in the session language and keep the reply natural rather than turning it into a checklist.${
-        lang === 'AR'
-          ? '\nتنبيه فائق الأهمية: الدكتور سأل عدة أسئلة في نفس الرسالة (الاسم، السن، مكان الولادة، السكن، الوظيفة، الزواج، التدخين، الكحوليات، أو أي أسئلة أخرى). يجب عليك الإجابة على كل سؤال من هذه الأسئلة بالكامل في ردك هذا دون أن تفوت أي سؤال إطلاقاً، واجمعها كلها في إجابة واحدة متكاملة ومترابطة بالعامية المصرية.'
-          : ''
-      }`
-    : '';
-  const systemPrompt =
-    buildPatientSystemPrompt(
-      caseData,
-      lang,
-      knowledgeContext,
-      voiceTurn,
-      studentTurn,
-      patientBehavior,
-    ) +
-    multiPartRule +
-    adminSystemPromptSuffix(settings, lang, 'patient');
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    ...promptHistory.map((m) => ({
-      role: (m.role === 'STUDENT' ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: m.content,
-    })),
-    { role: 'user', content: normalizedMessage },
-  ];
-
-  const voiceModel =
-    process.env.OPENAI_VOICE_MODEL ||
-    process.env.OPENAI_PATIENT_MODEL ||
-    'gpt-4o-mini';
-  const activeModel = voiceTurn ? voiceModel : chatPatientModel(settings);
-  const maxTokens = voiceTurn
-    ? VOICE_PATIENT_MAX_TOKENS
-    : Math.min(
-        Math.max(settings.maxTokens, multiPart ? CHAT_PATIENT_MULTI_MAX_TOKENS : CHAT_PATIENT_MAX_TOKENS),
-        multiPart ? CHAT_PATIENT_MULTI_MAX_TOKENS : CHAT_PATIENT_MAX_TOKENS,
-      );
-  const temperature = voiceTurn ? 0.3 : Math.min(Math.max(settings.temperature, 0.45), 0.65);
-  const chatTimeout = multiPart ? CHAT_MULTI_TIMEOUT_MS : CHAT_TIMEOUT_MS;
-
-  const raw = await callOpenAISafe(
-    messages,
-    activeModel,
-    temperature,
-    maxTokens,
-    () =>
-      voiceTurn
-        ? (lang === 'EN' ? 'Sorry, could you clarify?' : 'مش فاهم، ممكن توضّح سؤالك؟')
-        : mockPatientResponse(caseData, normalizedMessage, lang, history),
-    {
-      feature: voiceTurn ? 'realtime' : 'patient_chat',
-      userId: options?.userId,
-      sessionId: options?.sessionId,
-    },
-    { timeoutMs: voiceTurn ? VOICE_TIMEOUT_MS : chatTimeout, stream: voiceTurn },
-  );
-
-  const sanitized = sanitizePatientResponse(
-    caseData,
-    normalizedMessage,
-    raw,
-    lang,
-    voiceTurn,
-  );
-  const finalized = finalizePatientReply(
-    caseData,
-    normalizedMessage,
-    sanitized,
-    lang,
-    history,
-    voiceTurn,
-  );
-  const trimmed = finalized.trim();
-  if (!trimmed) {
-    return lang === 'AR' ? 'مش فاهم، ممكن توضّح سؤالك؟' : 'Could you clarify your question?';
-  }
-  return trimmed;
 }
 
 export interface VivaAnswerEvaluation {
@@ -5099,7 +5094,7 @@ const OSCE_EXAMINER_RULES = `You are an experienced, fair, and supportive OSCE e
 # 1 INTENT FIRST
 Before scoring, determine intent: answering / hint / clarification / repeat / general question / casual chat / I don't know / skip.
 If NOT an answer attempt: do NOT score, do NOT mark correct/incorrect — respond only to the request. advance=false.
-"I don't know" = No Answer (teaching reveal allowed), NOT "Wrong".
+"I don't know" / "idk" = Give-up intent (teaching reveal allowed, advance=true).
 
 # 2 MEANING OVER KEYWORDS (CRITICAL)
 Evaluate MEDICAL MEANING only. Never mark correct just because a keyword appeared.
@@ -5117,18 +5112,24 @@ Accept any medically correct alternative. Extra correct detail must never reduce
 # 6 ORDER
 Order does not matter unless the question asks for sequence/priority.
 
-# 7 FULL
+# 7 FULL ANSWER
 If medically complete: advance=true, brief confirmation, no unnecessary extra wording.
 
-# 8 PARTIAL
+# 8 PARTIAL ANSWER
 Acknowledge only what the student already said correctly. Encourage continuation. advance=false.
-Do NOT reveal missing answer items. Reveal specifics only on hint request or give-up.
+Do NOT reveal missing answer items. Ask a focused guiding question or invite them to add the remaining points.
 
-# 9 INCORRECT
-Do not say only "Wrong." Explain the misconception briefly and educationally. Never embarrass.
+# 9 INCORRECT ANSWER / MISCONCEPTION (CRITICAL)
+- If the student gives an incorrect answer, a wrong clinical concept, or a misconception (and did NOT say "I don't know" / give up):
+  - MUST set advance=false.
+  - State politely that the answer is not quite right or incorrect.
+  - Briefly point out the misconception WITHOUT giving away the correct answer or explaining what the correct answer is!
+  - Provide a guiding coaching hint or ask a guiding question to give the student a chance to think and try again.
+  - Example: If question is "What is the purpose of penicillin prophylaxis after rheumatic fever?" and student says "due to low immunity", respond: "Not quite — penicillin prophylaxis is not given for general low immunity. Think about what specific complication or recurrence we are trying to prevent in a patient who already had rheumatic fever. Would you like to try again?"
+  - NEVER dump the full solution/answer when an answer is wrong. Give the student the opportunity to answer.
 
 # 10 MINOR VS MAJOR
-Supportive tone for minor omissions. Clearly identify major medical misconceptions.
+Supportive tone for minor omissions. Clearly identify major medical misconceptions without revealing the solution.
 
 # 11–12 OPEN / NO GUESSING
 Credit every correct point mentioned. Never assume unstated meaning (e.g. "Calcium" ≠ Hypercalcemia).
@@ -5137,15 +5138,15 @@ Credit every correct point mentioned. Never assume unstated meaning (e.g. "Calci
 Ignore minor language errors unless they change meaning. Be fair — not overly strict or generous.
 
 # 16–17 STYLE / BEHAVIOR
-Professional, supportive, educational. Vary phrasing naturally. English only in feedback. 2-4 short sentences.
+Professional, supportive, coaching tone. English only in feedback. 2-3 short sentences.
 
 # 18 GOLD STANDARD
 Compare against the underlying medical concept — not reference wording.
 
-CRITICAL — NEVER LEAK THE KEY:
-- NEVER name/list/paraphrase unanswered model items the student did not say.
-- NEVER say "mention X and Y" for remaining points.
-- For partial: say more points are expected — without naming them.
+CRITICAL — NEVER LEAK THE KEY OR DUMP THE ANSWER:
+- NEVER state, list, or paraphrase the correct answer when the student's answer is incorrect or partial.
+- If incorrect, coach the student with a hint and prompt them to try again (advance=false).
+- ONLY reveal the expected answer if the student explicitly says "I don't know", "idk", "give up", "مش عارف", etc.
 
 Return ONLY valid JSON: {"advance":true|false,"feedback":"..."}`;
 
@@ -6079,6 +6080,22 @@ async function evaluateOsceMeaningTurn(options: {
   const local = mockEvaluateHistoryVivaAnswer(question, current, sampleAnswer, combined);
 
   const intent = detectVivaStudentIntent(current);
+  if (intent === 'give_up' || studentGaveUpAnswer(current)) {
+    let model = sampleAnswer.trim();
+    if (!model) {
+      try {
+        model = await generateVivaModelAnswer(caseData, question, 'EN');
+      } catch {
+        model = '';
+      }
+    }
+    return {
+      advance: true,
+      feedback: model
+        ? `No problem — here is the expected answer:\n${model}`
+        : "That's fine — it's good to acknowledge when you're unsure. Let's move on.",
+    };
+  }
   if (intent === 'hint') {
     return {
       advance: false,
@@ -6254,6 +6271,27 @@ export async function getExaminerVivaResponse(
   const provider = process.env.AI_PROVIDER || settings.provider;
   const caseTitle = lang === 'AR' ? caseData.titleAr || caseData.titleEn : caseData.titleEn;
 
+  if (studentGaveUpAnswer(question)) {
+    const lastExaminerMsg = [...history].reverse().find((m) => m.role === 'EXAMINER' || m.role === 'assistant');
+    const promptQ = lastExaminerMsg?.content || caseData.titleEn;
+    let model = '';
+    try {
+      model = await generateVivaModelAnswer(caseData, promptQ, lang);
+    } catch {
+      model = '';
+    }
+    return finalizeExaminerReply(
+      model
+        ? (lang === 'AR'
+            ? `مفيش مشكلة — الإجابة المتوقعة:\n${model}`
+            : `No problem — here is the expected answer:\n${model}`)
+        : (lang === 'AR'
+            ? `مفيش مشكلة — كويس إنك تقول لما مش عارف. نكمّل.`
+            : `That's fine — it's good to acknowledge when you're unsure. Let's move on.`),
+      lang,
+    );
+  }
+
   if (provider === 'mock' || provider === 'demo') {
     return finalizeExaminerReply(
       lang === 'AR'
@@ -6330,6 +6368,70 @@ export function getManeuverOpeningMessage(
   return resolveManeuverOpeningMessage(maneuverId, parseStationConfig(null));
 }
 
+async function resolveSpecificManeuverAnswer(
+  questionAsked: string,
+  maneuverFindings: string,
+  caseData: Case,
+  maneuverName: string,
+  language: Language = 'EN',
+): Promise<string> {
+  if (!maneuverFindings.trim() || !questionAsked.trim()) return '';
+
+  const isAr = String(language || '').toUpperCase() === 'AR';
+  const settings = await getAISettings();
+  const provider = process.env.AI_PROVIDER || settings.provider;
+
+  if (provider === 'mock' || provider === 'demo') {
+    const qLower = questionAsked.toLowerCase();
+    if (qLower.includes('scar') && (qLower.includes('where') || qLower.includes('location'))) {
+      const match = maneuverFindings.match(/in\s+([a-z\s-]+(?:line|area|chest|axillary|sternum|intercostal))/i);
+      return match ? `The scar is located in the ${match[1].trim()}.` : maneuverFindings.split('.')[0] || maneuverFindings;
+    }
+    return maneuverFindings.split('.')[0] || maneuverFindings;
+  }
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `You are an expert OSCE clinical examiner. During physical examination (${maneuverName}), the examiner asked this specific question/prompt:
+"${questionAsked}"
+
+Expected full findings for this step:
+"${maneuverFindings}"
+
+The candidate answered "I don't know" to that specific question.
+Extract and provide ONLY the direct, concise answer to THAT specific question from the expected findings.
+- Answer only what was asked in 1 concise sentence (maximum 2 sentences).
+- Do NOT output unrelated parts of the findings paragraph.
+- No conversational filler, no greetings, no introductory headers.
+- Language: ${isAr ? 'English medical terms or Egyptian medical Arabic as appropriate' : 'English'}.`,
+    },
+    {
+      role: 'user',
+      content: `Provide the specific answer to: "${questionAsked}" based on the findings.`,
+    },
+  ];
+
+  try {
+    const raw = await callOpenAISafe(
+      messages,
+      settings.examinerModel,
+      0.1,
+      120,
+      () => '',
+      { feature: 'examiner_viva' },
+    );
+    const result = unwrapExaminerPlainText(raw).trim();
+    if (result && result.length < maneuverFindings.length * 0.85) {
+      return result;
+    }
+  } catch {
+    // fallback
+  }
+
+  return '';
+}
+
 export async function getManeuverExaminerResponse(
   caseData: Case,
   maneuverId: string,
@@ -6358,13 +6460,44 @@ export async function getManeuverExaminerResponse(
     : null;
 
   if (studentGaveUpAnswer(current)) {
+    const lastExaminerMsg = [...history]
+      .reverse()
+      .find((m) => {
+        const role = String(m.role || '').toUpperCase();
+        return role === 'EXAMINER' || role === 'ASSISTANT';
+      });
+
+    const isAr = String(_language || '').toUpperCase() === 'AR';
+
+    if (lastExaminerMsg?.content && maneuverFindings) {
+      const specificAnswer = await resolveSpecificManeuverAnswer(
+        lastExaminerMsg.content,
+        maneuverFindings,
+        caseData,
+        name,
+        _language,
+      );
+
+      if (specificAnswer) {
+        return unwrapExaminerPlainText(
+          isAr
+            ? `مفيش مشكلة — الإجابة:\n${specificAnswer}`
+            : `No problem — here is the answer:\n${specificAnswer}`,
+        );
+      }
+    }
+
     if (maneuverFindings) {
       return unwrapExaminerPlainText(
-        `No problem — here are the expected ${name} findings:\n${maneuverFindings}`,
+        isAr
+          ? `مفيش مشكلة — نتائج فحص ${name} المتوقعة:\n${maneuverFindings}`
+          : `No problem — here are the expected ${name} findings:\n${maneuverFindings}`,
       );
     }
     return unwrapExaminerPlainText(
-      `That's fine — it's good to say when you're unsure. For ${name}, review the key clinical signs linked to this case and we can continue.`,
+      isAr
+        ? `تمام — كويس إنك تقول لما مش عارف. في ${name}، راجع العلامات السريرية ونقدر نكمل.`
+        : `That's fine — it's good to say when you're unsure. For ${name}, review the key clinical signs linked to this case and we can continue.`,
     );
   }
 
@@ -6397,17 +6530,70 @@ export async function getManeuverExaminerResponse(
   return unwrapExaminerPlainText(progressiveFeedback || evaluation.feedback);
 }
 
-const GAVE_UP_ANSWER_PATTERNS = [
+export async function generateVivaModelAnswer(
+  caseData: Case,
+  question: string,
+  language?: string,
+): Promise<string> {
+  const settings = await getAISettings();
+  const provider = process.env.AI_PROVIDER || settings.provider;
+  if (provider === 'mock' || provider === 'demo') {
+    return `In this case (${caseData.titleEn}), the expected clinical focus is on assessing key signs, differential diagnoses, and appropriate management.`;
+  }
+
+  const isAr = String(language || '').toUpperCase() === 'AR';
+  const langPrompt = isAr
+    ? 'Provide the concise clinical answer in English or Egyptian medical terminology as appropriate for medical examinations.'
+    : 'Provide the concise clinical answer in English.';
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `You are an expert medical OSCE examiner. Provide a concise, highly accurate, and direct expected answer (1 to 2 clear sentences or brief points) for the given viva question in the context of the clinical case.
+Case Title: ${caseData.titleEn}
+Diagnosis: ${caseData.finalDiagnosis}
+Teaching Points: ${caseData.teachingPoints || ''}
+${langPrompt}
+Output ONLY the direct answer. No intro, no "Here is the answer", no markdown headers.`,
+    },
+    {
+      role: 'user',
+      content: `Question: ${question}`,
+    },
+  ];
+
+  try {
+    const raw = await callOpenAISafe(
+      messages,
+      settings.examinerModel,
+      0.2,
+      200,
+      () => '',
+      { feature: 'examiner_viva' },
+    );
+    return unwrapExaminerPlainText(raw).trim();
+  } catch {
+    return '';
+  }
+}
+
+export const GAVE_UP_ANSWER_PATTERNS = [
   /\b(i\s*)?(don'?t|do\s*not)\s*know\b/i,
   /\bidk\b/i,
+  /\bdunno\b/i,
   /\bnot\s*sure\b/i,
   /\bno\s*idea\b/i,
+  /\bno\s*clue\b/i,
+  /\bcan'?t\s+remember\b/i,
+  /\bunsure\b/i,
   /\bpass\b/i,
-  /مش\s*عارف|مش\s*عارفه|معرفش|معنديش\s*فكره|لا\s*أعرف|ما\s*اعرف|منعرفش/i,
+  /\bskip\b/i,
+  /مش\s*عارف|مش\s*عارفه|مش\s*عارفة|مش\s*عرف|معرفش|معنديش\s*فكره|معنديش\s*فكرة|معنديش\s*معلومة|معنديش\s*معلومه|لا\s*أعرف|لا\s*اعرف|لا\s*أعلم|لا\s*اعلم|ما\s*اعرف|ما\s*أعرف|منعرفش|مش\s*فاكر|مش\s*فاكرة|مش\s*متأكد|مش\s*متاكد/i,
 ];
 
-function studentGaveUpAnswer(answer: string): boolean {
+export function studentGaveUpAnswer(answer: string): boolean {
   const normalized = answer.trim();
   if (!normalized) return false;
   return GAVE_UP_ANSWER_PATTERNS.some((pattern) => pattern.test(normalized));
 }
+

@@ -2,6 +2,7 @@ import type { Case } from "@prisma/client";
 import {
   detectVivaStudentIntent,
   evaluateHistoryVivaAnswer,
+  generateVivaModelAnswer,
   unwrapExaminerPlainText,
 } from "./aiService.js";
 
@@ -83,6 +84,86 @@ const QUESTION_POOLS: Record<string, string[]> = {
   ],
 };
 
+export const QUESTION_SAMPLE_ANSWERS: Record<string, string> = {
+  // heartFailure
+  "What are the key clinical features that suggest acute decompensated heart failure in this patient?":
+    "Key features include progressive dyspnea, orthopnea, paroxysmal nocturnal dyspnea (PND), elevated jugular venous pressure (JVP), bilateral basal lung crackles, and bilateral lower limb edema.",
+  "How would you differentiate cardiac dyspnea from primary respiratory causes at the bedside?":
+    "Cardiac dyspnea is suggested by orthopnea, PND, raised JVP, S3 gallop, and bilateral basal crackles, whereas respiratory causes typically feature wheezing, chronic productive cough, prolonged expiration, and absence of venous congestion.",
+  "Which physical signs would you look for to assess volume overload?":
+    "Elevated JVP (with positive hepatojugular reflux), bilateral basal pulmonary crackles, bilateral pitting lower extremity edema, ascites, and a third heart sound (S3).",
+  "What is the role of BNP or NT-proBNP in evaluating breathlessness?":
+    "BNP / NT-proBNP has a very high negative predictive value to rule out heart failure in acute dyspnea, and helps differentiate cardiac from pulmonary causes when clinical assessment is uncertain.",
+  "Which medications improve long-term mortality in heart failure with reduced ejection fraction?":
+    "The 4 pillars of guideline-directed medical therapy (GDMT): ACE inhibitors / ARB / ARNI (sacubitril/valsartan), evidence-based Beta-blockers (bisoprolol, carvedilol, metoprolol succinate), Mineralocorticoid receptor antagonists (spironolactone/eplerenone), and SGLT2 inhibitors (dapagliflozin/empagliflozin).",
+  "How would you assess volume status before starting diuretics?":
+    "Assess blood pressure and pulse (including orthostatic changes), JVP elevation, lung crackles, peripheral edema, daily weight, and check baseline renal function and electrolytes.",
+  "What findings on chest examination would support pulmonary congestion?":
+    "Bilateral fine/coarse end-inspiratory crackles (especially at lung bases) that do not clear with coughing, dullness at lung bases if pleural effusion is present, and tachypnea.",
+  "What red flags would make you admit this patient urgently?":
+    "Hemodynamic instability or hypotension (cardiogenic shock), severe hypoxemia / respiratory distress, acute chest pain suggesting ACS, severe pulmonary edema, or malignant arrhythmias.",
+  "How does orthopnea help you in your differential diagnosis?":
+    "Orthopnea is highly specific for left ventricular dysfunction and elevated pulmonary capillary wedge pressure caused by increased venous return to the heart in the supine position.",
+  "What lifestyle and self-care advice is important in chronic heart failure?":
+    "Daily morning weight monitoring, dietary sodium restriction (<2-3g/day), fluid restriction if needed, smoking and alcohol cessation, medication compliance, and recognizing warning signs of fluid overload.",
+  "Which investigations would you order first in suspected ADHF?":
+    "12-lead ECG, chest X-ray, serum BNP/NT-proBNP, complete blood count (CBC), renal function and electrolytes (urea, creatinine, K+), and urgent transthoracic echocardiogram (TTE).",
+  "How would ankle swelling guide your history and examination?":
+    "It indicates right heart failure / systemic venous congestion; history should evaluate timing, progression, associated dyspnea, liver/renal diseases, and medications (e.g., calcium channel blockers).",
+
+  // valvular
+  "What features in the history suggest underlying valvular heart disease?":
+    "History of acute rheumatic fever in childhood, exertional dyspnea, angina, presyncope/syncope, palpitations, fatigue, and history of known heart murmurs.",
+  "How does severe aortic stenosis typically present clinically?":
+    "The classic symptom triad of exertional dyspnea, angina, and exertional syncope, accompanied by slow-rising pulse (pulsus parvus et tardus) and a harsh crescendo-decrescendo ejection systolic murmur radiating to carotids.",
+  "What murmur characteristics help you distinguish aortic stenosis from mitral regurgitation?":
+    "Aortic stenosis produces a harsh crescendo-decrescendo ejection systolic murmur best heard at the right 2nd intercostal space radiating to carotids. Mitral regurgitation produces a blowing pansystolic (holosystolic) murmur best heard at the apex radiating to the left axilla.",
+  "Why is rheumatic fever history important in a young patient with dyspnea?":
+    "Rheumatic heart disease is the most common cause of acquired valvular lesions (especially mitral stenosis and mixed valvular disease) in developing countries.",
+  "What is the purpose of penicillin prophylaxis after rheumatic fever?":
+    "Secondary antibiotic prophylaxis (e.g., monthly benzathine penicillin G) prevents recurrent Group A streptococcal pharyngitis, which stops recurrent attacks and prevents worsening valvular damage.",
+  "What symptoms suggest low cardiac output in valvular disease?":
+    "Exertional fatigue, lightheadedness, presyncope, exertional syncope, cool peripheries, and exertional angina due to fixed stroke volume.",
+  "How would you investigate a new systolic murmur in a young adult?":
+    "Transthoracic echocardiography (TTE) with Doppler to assess valve morphology and transvalvular gradients, alongside 12-lead ECG and chest radiography.",
+  "What does a narrow pulse pressure suggest on examination?":
+    "It reflects low stroke volume and decreased systolic ejection, characteristic of severe aortic stenosis, severe left ventricular systolic failure, or cardiogenic shock.",
+  "When would you refer a patient with valvular disease for surgery?":
+    "When severe valvular disease becomes symptomatic (dyspnea, angina, syncope), or in asymptomatic patients with left ventricular systolic dysfunction (LVEF < 50%), severe LV dilatation, or severe pulmonary hypertension.",
+  "What are the risks of exertion in severe aortic stenosis?":
+    "In severe AS, fixed cardiac output cannot meet increased peripheral demand during exercise, causing critical cerebral/coronary hypoperfusion leading to syncope, ventricular arrhythmias, or sudden cardiac death.",
+  "How would paroxysmal nocturnal dyspnea change your assessment?":
+    "PND indicates acute pulmonary venous congestion and left-sided cardiac decompensation with elevated left atrial pressure, signaling urgent need for medical stabilization and evaluation for valve intervention.",
+  "What does a displaced heaving apex suggest?":
+    "It suggests left ventricular hypertrophy and enlargement due to volume or pressure overload, commonly seen in aortic regurgitation, mitral regurgitation, or dilated cardiomyopathy.",
+
+  // default
+  "What is your leading differential diagnosis based on the history so far?":
+    "The primary differential diagnosis that best fits the presenting symptom constellation and risk profile, alongside 2-3 prioritized secondary alternatives.",
+  "Which features in the history are most concerning and why?":
+    "Red flag features such as severe rest dyspnea, syncope, hemodynamic instability, severe chest pain, or rapid deterioration that indicate high clinical acuity.",
+  "What key points would you cover in a systems review for this presentation?":
+    "Cardiovascular (chest pain, palpitations, edema), respiratory (cough, hemoptysis, wheezing), gastrointestinal, renal/fluid balance, and constitutional symptoms.",
+  "How would you prioritize your investigations for this case?":
+    "Immediate bedside tests (vitals, ECG, bedside ultrasound), urgent baseline laboratory tests (cardiac biomarkers, CBC, electrolytes/renal function), followed by confirmatory imaging (echocardiogram/CT/X-ray).",
+  "What red flags would change your management urgently?":
+    "Hypotension/shock, altered mental status, severe respiratory distress/hypoxemia, intractable ischemic pain, or life-threatening arrhythmias.",
+  "How would you explain your initial management plan to the patient?":
+    "Explain the likely clinical diagnosis in clear, empathetic lay terms, describe immediate symptom-relief steps, outline scheduled investigations, and reassure the patient.",
+  "What further history would help narrow the differential?":
+    "Exact timeline and progression of symptoms, specific triggers and relieving factors, comprehensive past medical and drug history, and relevant family history.",
+  "Which physical examination findings would you expect in this case?":
+    "Vital sign abnormalities, specific cardiac/respiratory examination signs (murmurs, crackles, raised JVP), and signs of peripheral congestion or hypoperfusion.",
+  "How would you document your clinical reasoning for the examiner?":
+    "Synthesize the chief complaint, key positive and negative findings, structured prioritized differentials with clinical reasoning, and a clear diagnostic and treatment plan.",
+  "What safety-net advice would you give before discharge?":
+    "Explicitly outline red flag warning symptoms requiring urgent emergency re-attendance, clear medication instructions, and follow-up timeline.",
+  "Which comorbidities would most affect your treatment choices?":
+    "Chronic kidney disease, diabetes mellitus, hypertension, hepatic dysfunction, and underlying ischemic heart or lung disease.",
+  "What is the most important question you still need to ask this patient?":
+    "Clarifying the onset, progression, and severity of the primary symptom along with any life-threatening red flags.",
+};
+
 const GAVE_UP_PATTERNS = [
   /\bdon'?t\s+know\b/i,
   /\bi\s+don'?t\s+know\b/i,
@@ -94,13 +175,28 @@ const GAVE_UP_PATTERNS = [
   /\bno\s+clue\b/i,
   /\bcan'?t\s+remember\b/i,
   /\bunsure\b/i,
+  /\bpass\b/i,
+  /\bskip\b/i,
   /مش\s+عارف/i,
   /معرفش/i,
   /لا\s+أعرف/i,
+  /لا\s+اعرف/i,
+  /لا\s+أعلم/i,
+  /لا\s+اعلم/i,
+  /ما\s+اعرف/i,
+  /ما\s+أعرف/i,
   /مش\s+فاكر/i,
+  /مش\s+فاكرة/i,
   /مش\s+عارفه/i,
   /مش\s+عارفة/i,
   /مش\s+عرف/i,
+  /مش\s+متأكد/i,
+  /مش\s+متاكد/i,
+  /معنديش\s+فكرة/i,
+  /معنديش\s+فكره/i,
+  /معنديش\s+معلومة/i,
+  /معنديش\s+معلومه/i,
+  /منعرفش/i,
 ];
 
 function casePoolKey(caseData: Case): string {
@@ -155,11 +251,13 @@ function parseCaseExaminerQuestions(caseData: Case): ExaminerVivaItem[] {
     return parsed
       .map((row) => {
         if (typeof row === "string") {
-          return { question: row.trim(), sampleAnswer: "" };
+          const q = row.trim();
+          return { question: q, sampleAnswer: QUESTION_SAMPLE_ANSWERS[q] || "" };
         }
+        const q = String(row.question ?? "").trim();
         return {
-          question: String(row.question ?? "").trim(),
-          sampleAnswer: String(row.sampleAnswer ?? "").trim(),
+          question: q,
+          sampleAnswer: String(row.sampleAnswer ?? "").trim() || QUESTION_SAMPLE_ANSWERS[q] || "",
         };
       })
       .filter((row) => row.question);
@@ -175,13 +273,21 @@ export function pickVivaQuestionsForSession(
   const custom = parseCaseExaminerQuestions(caseData);
   if (custom.length > 0) {
     const seed = `${sessionId}:${caseData.id}:${caseData.titleEn}:custom`;
-    return seededShuffle(custom, seed).slice(0, VIVA_QUESTIONS_PER_SESSION);
+    return seededShuffle(custom, seed)
+      .slice(0, VIVA_QUESTIONS_PER_SESSION)
+      .map((item) => ({
+        question: item.question,
+        sampleAnswer: item.sampleAnswer || QUESTION_SAMPLE_ANSWERS[item.question] || "",
+      }));
   }
   const pool = QUESTION_POOLS[casePoolKey(caseData)] ?? QUESTION_POOLS.default;
   const seed = `${sessionId}:${caseData.id}:${caseData.titleEn}`;
   return seededShuffle(pool, seed)
     .slice(0, VIVA_QUESTIONS_PER_SESSION)
-    .map((question) => ({ question, sampleAnswer: "" }));
+    .map((question) => ({
+      question,
+      sampleAnswer: QUESTION_SAMPLE_ANSWERS[question] || "",
+    }));
 }
 
 export function isHistoryExaminerVivaStage(
@@ -324,16 +430,32 @@ export function getCumulativeStudentAnswerForCurrentQuestion(
   };
 }
 
-function buildGaveUpFeedback(sampleAnswer: string, language?: string): string {
-  const model = sampleAnswer.trim();
+async function buildGaveUpFeedback(
+  caseData: Case,
+  currentQuestion: ExaminerVivaItem,
+  language?: string,
+): Promise<string> {
+  let model =
+    currentQuestion.sampleAnswer?.trim() ||
+    QUESTION_SAMPLE_ANSWERS[currentQuestion.question]?.trim() ||
+    '';
   const isAr = String(language || '').toUpperCase() !== 'EN';
+
+  if (!model) {
+    try {
+      model = await generateVivaModelAnswer(caseData, currentQuestion.question, language);
+    } catch {
+      model = '';
+    }
+  }
+
   if (!model) {
     return isAr
       ? "مفيش مشكلة — كويس إنك تقول لما مش عارف. نكمّل."
       : "That's fine — it's good to acknowledge when you're unsure. Let's move on.";
   }
   return isAr
-    ? `مفيش مشكلة — الإجابة المتوقعة:\n${model}`
+    ? `مفيش مشكلة — الإجابة الصحيحة:\n${model}`
     : `No problem — here is the expected answer:\n${model}`;
 }
 
@@ -391,19 +513,20 @@ export async function respondToHistoryVivaAnswer(
     return `Let's stay with this viva question:\n${currentQuestion.question}`;
   }
 
-  const evaluation = intent === 'give_up' || studentGaveUp(studentAnswer)
-    ? {
-        advance: true,
-        feedback: buildGaveUpFeedback(currentQuestion.sampleAnswer, language),
-      }
-    : await evaluateHistoryVivaAnswer(
-        caseData,
-        currentQuestion.question,
-        questionNumber,
-        studentAnswer,
-        currentQuestion.sampleAnswer,
-        combinedStudentAnswer,
-      );
+  const evaluation =
+    intent === 'give_up' || studentGaveUp(studentAnswer)
+      ? {
+          advance: true,
+          feedback: await buildGaveUpFeedback(caseData, currentQuestion, language),
+        }
+      : await evaluateHistoryVivaAnswer(
+          caseData,
+          currentQuestion.question,
+          questionNumber,
+          studentAnswer,
+          currentQuestion.sampleAnswer,
+          combinedStudentAnswer,
+        );
 
   // Never leak accidental model JSON into the Examiner Box chat.
   const feedback = unwrapExaminerPlainText(evaluation.feedback);
