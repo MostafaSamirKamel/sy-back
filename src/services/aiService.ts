@@ -4256,58 +4256,23 @@ export async function getPatientResponse(
     getAISettingsCached(),
   ]);
 
-  // Pure greetings must never dump medical history — even when admin AI knowledge exists.
-  if (
-    isGreetingOnly(normalizedMessage) &&
-    !asksAboutSymptoms(normalizedMessage) &&
-    !asksWellbeing(normalizedMessage)
-  ) {
-    const greeting = patientGreetingOnlyReply(
-      caseData,
-      resolvePatientLanguage(lang, normalizedMessage),
-      normalizedMessage,
-    );
-    return finalizePatientReply(caseData, normalizedMessage, greeting, lang, history, voiceTurn);
-  }
+  const provider = (process.env.AI_PROVIDER || settings.provider || 'openrouter').toLowerCase();
 
-  // Skip other canned social scripts when admin configured patient AI knowledge.
-  /*
-  if (!customPatientKnowledge) {
-    const social = quickSocialPatientReply(caseData, normalizedMessage, lang, history, voiceTurn);
-    if (social) {
-      return finalizePatientReply(caseData, normalizedMessage, social, lang, history, voiceTurn);
+  if (provider === 'mock' || provider === 'demo') {
+    // Pure greetings in mock mode
+    if (
+      isGreetingOnly(normalizedMessage) &&
+      !asksAboutSymptoms(normalizedMessage) &&
+      !asksWellbeing(normalizedMessage)
+    ) {
+      const greeting = patientGreetingOnlyReply(
+        caseData,
+        resolvePatientLanguage(lang, normalizedMessage),
+        normalizedMessage,
+      );
+      return finalizePatientReply(caseData, normalizedMessage, greeting, lang, history, voiceTurn);
     }
-  }
-  */
 
-  const multiPart = !voiceTurn && isMultiPartPatientQuestion(normalizedMessage);
-  const multiPartQuestionCount = messageQuestionParts(normalizedMessage).length;
-  const detectedIntents = resolvePatientQuestionIntents(normalizedMessage);
-  // These questions have a well-defined answer only when the case explicitly
-  // documents it. Keep them deterministic even when supplementary admin
-  // patient knowledge exists, so an LLM cannot turn an omission into yes/no.
-  const requiresGroundedDeterministicReply = detectedIntents.some((intent) =>
-    [
-      'birthPlace',
-      'residence',
-      'occupation',
-      'marital',
-      'hobbies',
-      'socialHabits',
-      'allergy',
-      'familyHistory',
-      'dizziness',
-      'cough',
-      'recentFever',
-      'pillowCount',
-      'orthopneaPnd',
-    ].includes(intent),
-  );
-
-  // Multi-part chat questions must get a complete bundled answer. Prefer deterministic
-  // even when admin patient knowledge exists — otherwise the model often answers only
-  // the first 1–2 items and waits for "complete the answer".
-  if (multiPart || !customPatientKnowledge || requiresGroundedDeterministicReply) {
     const deterministic = getDeterministicPatientResponse(
       caseData,
       normalizedMessage,
@@ -4316,32 +4281,16 @@ export async function getPatientResponse(
       voiceTurn,
     );
     if (deterministic !== null) {
-      const intents = detectedIntents;
-
-      // A deterministic shortcut is safe for a multi-question message only when
-      // we understood every separate question part. Otherwise let the AI model
-      // see the complete message so it can answer anything our intent layer missed.
-      const hasCompleteDeterministicCoverage =
-        !multiPart ||
-        multiPartQuestionCount <= 1 ||
-        intents.length >= multiPartQuestionCount;
-
-      if (hasCompleteDeterministicCoverage) {
-        return finalizePatientReply(
-          caseData,
-          normalizedMessage,
-          deterministic,
-          lang,
-          history,
-          voiceTurn,
-        );
-      }
+      return finalizePatientReply(
+        caseData,
+        normalizedMessage,
+        deterministic,
+        lang,
+        history,
+        voiceTurn,
+      );
     }
-  }
 
-  const provider = process.env.AI_PROVIDER || settings.provider;
-
-  if (provider === 'mock' || provider === 'demo') {
     return finalizePatientReply(
       caseData,
       normalizedMessage,
@@ -4351,6 +4300,8 @@ export async function getPatientResponse(
       voiceTurn,
     );
   }
+
+  const multiPart = !voiceTurn && isMultiPartPatientQuestion(normalizedMessage);
 
   const knowledgeContext = await getRoleKnowledgeContext({
     categoryId: caseData.categoryId,
