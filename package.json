@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/index.js",
+    "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx src/seed.ts",
@@ -15,6 +16,9 @@
     "test:realtime": "tsx scripts/test-realtime-live-call.ts",
     "test:openrouter-audio": "tsx scripts/test-openrouter-audio.ts",
     "test:openrouter-voice-route-live": "tsx scripts/test-openrouter-voice-route-live.ts"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
@@ -33,7 +37,6 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^9.0.1",
     "openai": "^4.86.2",
-    "synoza": "file:..",
     "wavefile": "^11.0.0"
   },
   "devDependencies": {

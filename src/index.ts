@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -108,19 +109,24 @@ app.use("/exam", express.static(packagedExamRoot()));
 app.use("/knowledge", express.static(persistentAiKnowledgeRoot()));
 
 const clientDist = path.join(__dirname, "../../client/dist");
-app.use(express.static(clientDist));
-app.get("*", (req, res, next) => {
-  if (
-    req.path.startsWith("/api") ||
-    req.path.startsWith("/exam") ||
-    req.path.startsWith("/knowledge")
-  ) {
-    return next();
-  }
-  res.sendFile(path.join(clientDist, "index.html"), (err) => {
-    if (err) next();
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get("*", (req, res, next) => {
+    if (
+      req.path.startsWith("/api") ||
+      req.path.startsWith("/exam") ||
+      req.path.startsWith("/knowledge")
+    ) {
+      return next();
+    }
+    const indexPath = path.join(clientDist, "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      next();
+    }
   });
-});
+}
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
