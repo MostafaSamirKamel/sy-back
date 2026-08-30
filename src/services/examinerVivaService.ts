@@ -430,30 +430,47 @@ export function getCumulativeStudentAnswerForCurrentQuestion(
   };
 }
 
+export function findSampleAnswerForQuestion(question: string, fallbackSampleAnswer = ''): string {
+  if (fallbackSampleAnswer && fallbackSampleAnswer.trim()) {
+    return fallbackSampleAnswer.trim();
+  }
+  const trimmed = (question || '').trim();
+  if (QUESTION_SAMPLE_ANSWERS[trimmed]) {
+    return QUESTION_SAMPLE_ANSWERS[trimmed];
+  }
+  const qNorm = trimmed.toLowerCase().replace(/[^a-z0-9\u0600-\u06ff\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const [key, answer] of Object.entries(QUESTION_SAMPLE_ANSWERS)) {
+    const kNorm = key.toLowerCase().replace(/[^a-z0-9\u0600-\u06ff\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (qNorm === kNorm || (qNorm.length >= 12 && (qNorm.includes(kNorm) || kNorm.includes(qNorm)))) {
+      return answer;
+    }
+  }
+  return '';
+}
+
 async function buildGaveUpFeedback(
   caseData: Case,
   currentQuestion: ExaminerVivaItem,
   language?: string,
 ): Promise<string> {
-  let model =
-    currentQuestion.sampleAnswer?.trim() ||
-    QUESTION_SAMPLE_ANSWERS[currentQuestion.question]?.trim() ||
-    '';
-  const isAr = String(language || '').toUpperCase() !== 'EN';
+  let model = findSampleAnswerForQuestion(currentQuestion.question, currentQuestion.sampleAnswer);
+  const isQuestionArabic = /[\u0600-\u06ff]/.test(currentQuestion.question);
+  const isAr = isQuestionArabic || String(language || '').toUpperCase() === 'AR';
 
   if (!model) {
     try {
-      model = await generateVivaModelAnswer(caseData, currentQuestion.question, language);
+      model = await generateVivaModelAnswer(caseData, currentQuestion.question, isAr ? 'AR' : 'EN');
     } catch {
       model = '';
     }
   }
 
   if (!model) {
-    return isAr
-      ? "مفيش مشكلة — كويس إنك تقول لما مش عارف. نكمّل."
-      : "That's fine — it's good to acknowledge when you're unsure. Let's move on.";
+    model = isAr
+      ? `في حالة (${caseData.titleAr || caseData.titleEn})، الإجابة المتوقعة ترتبط بـ ${caseData.finalDiagnosis} وعلاماتها السريرية وإدارتها.`
+      : `For this case (${caseData.titleEn}), the expected clinical consideration relates to ${caseData.finalDiagnosis}.`;
   }
+
   return isAr
     ? `مفيش مشكلة — الإجابة الصحيحة:\n${model}`
     : `No problem — here is the expected answer:\n${model}`;

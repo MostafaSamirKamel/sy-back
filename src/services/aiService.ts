@@ -6082,18 +6082,24 @@ async function evaluateOsceMeaningTurn(options: {
   const intent = detectVivaStudentIntent(current);
   if (intent === 'give_up' || studentGaveUpAnswer(current)) {
     let model = sampleAnswer.trim();
+    const isAr = /[\u0600-\u06ff]/.test(question) || /[\u0600-\u06ff]/.test(current);
     if (!model) {
       try {
-        model = await generateVivaModelAnswer(caseData, question, 'EN');
+        model = await generateVivaModelAnswer(caseData, question, isAr ? 'AR' : 'EN');
       } catch {
         model = '';
       }
     }
+    if (!model) {
+      model = isAr
+        ? `في سياق حالة (${caseData.titleAr || caseData.titleEn})، الإجابة تعتمد على تقييم علامات ومضاعفات ${caseData.finalDiagnosis} وخطة الإدارة.`
+        : `For this case (${caseData.titleEn}), the expected answer relates to evaluating ${caseData.finalDiagnosis}.`;
+    }
     return {
       advance: true,
-      feedback: model
-        ? `No problem — here is the expected answer:\n${model}`
-        : "That's fine — it's good to acknowledge when you're unsure. Let's move on.",
+      feedback: isAr
+        ? `مفيش مشكلة — الإجابة الصحيحة:\n${model}`
+        : `No problem — here is the expected answer:\n${model}`,
     };
   }
   if (intent === 'hint') {
