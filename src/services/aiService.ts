@@ -5228,6 +5228,15 @@ function expandClinicalAliases(text: string): string {
       /\bsmooth\b.*\bpale\b|\bpale\b.*\bstretched\b|\bstretched\b.*\bshiny\b|\bshiny\s+skin\b/g,
       ' smooth pale stretched shiny skin ',
     ],
+    // Cardiovascular / Viva presentation terms & common misspellings
+    [/\bdyspnea\b|\bdyspnoea\b|\bdyspenea\b|\bdispnea\b|\bshortness\s+of\s+breath\b|\bsob\b|\bbreathlessness\b|\bshort\s+of\s+breath\b|\bنهجان\b|\bضيق\s+تنفس\b/gi, ' exertional dyspnea dyspnea shortness of breath '],
+    [/\bangina\b|\bangila\b|\banginal\b|\bchest\s+pain\b|\bangina\s+pectoris\b|\bألم\s+بالصدر\b|\bذبحة\b/gi, ' angina chest pain angina pectoris '],
+    [/\bsyncope\b|\bsyncop\b|\bfainting\b|\bblackout\b|\bpassed\s+out\b|\bloss\s+of\s+consciousness\b|\bإغماء\b|\bدوخة\b/gi, ' syncope exertional syncope fainting '],
+    [/\bmurmur\b|\bejection\s+systolic\b|\bsystolic\s+murmur\b|\bcrescendo\b/gi, ' murmur crescendo-decrescendo ejection systolic murmur '],
+    [/\bslow\s+rising\s+pulse\b|\bpulsus\s+parvus\b|\bparvus\s+et\s+tardus\b|\bweak\s+pulse\b/gi, ' slow-rising pulse pulsus parvus et tardus '],
+    [/\bradiat(?:ing|ion)?\s+to\s+carotids?\b|\bto\s+carotids?\b|\bneck\s+radiation\b/gi, ' radiating to carotids '],
+    [/\bpansystolic\b|\bholosystolic\b|\bmitral\s+regurgitation\b/gi, ' pansystolic holosystolic mitral regurgitation '],
+    [/\bradiat(?:ing|ion)?\s+to\s+axilla\b|\bto\s+axilla\b/gi, ' radiating to axilla '],
     [
       /\bno\s+redness\b|\bno\s+localized\s+redness\b|\bvaricose\s+veins\b|\bno\s+pigmentation\b/g,
       ' no localized redness pigmentation varicose veins ',
@@ -5909,7 +5918,11 @@ function evaluateHistoryVivaAnswerFromModel(
     };
   }
 
-  if (matched.length > 0 && missing.length === 0) {
+  const totalPoints = matched.length + missing.length;
+  const coverageRatio = totalPoints > 0 ? matched.length / totalPoints : 0;
+
+  // Complete if all missing covered, or major core clinical presentation covered (>= 2 points or >= 50% coverage).
+  if (matched.length > 0 && (missing.length === 0 || (matched.length >= 2 && totalPoints <= 5) || coverageRatio >= 0.5)) {
     return {
       advance: true,
       feedback: buildPartialCreditFeedback(matched, missing),
@@ -5950,10 +5963,10 @@ function evaluateHistoryVivaAnswerFromModel(
   }
 
   const words = current.split(/\s+/).filter(Boolean);
-  // Single distinctive clinical tokens ("scar", "edema") can still earn partial credit above.
+  // Single distinctive clinical tokens ("scar", "dyspnea", "angina", "syncope") can still earn partial credit.
   if (
     words.length < 2 &&
-    !/\b(scar|edema|oedema|murmur|thrill|jaundice|cyanosis|ندبة|clubbing)\b/i.test(current)
+    !/\b(scar|edema|oedema|murmur|thrill|jaundice|cyanosis|dyspnea|dyspnoea|dyspenea|dispnea|angina|angila|syncope|fever|crackles|pain|نهجان|إغماء|ذبحة|ندبة|clubbing|cough|fatigue)\b/i.test(current)
   ) {
     return {
       advance: false,
@@ -6222,12 +6235,13 @@ ${modelAnswerBlock}${coverageHint}${knowledgeContext}`,
     };
   }
 
-  // If LLM claims complete but local still sees many uncovered points, stay partial.
+  // If LLM claims complete, allow advance unless local explicitly sees 0 matching points on multi-point keys
   if (
     sampleAnswer.trim() &&
     parsed.advance &&
-    localCoverage.missing.length >= 2 &&
-    localCoverage.coverage < 0.75
+    localCoverage.missing.length >= 3 &&
+    localCoverage.matched.length === 0 &&
+    localCoverage.coverage < 0.2
   ) {
     return {
       advance: false,
