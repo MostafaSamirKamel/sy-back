@@ -822,12 +822,12 @@ JSON structure (all scores 0-100 integers):
 }
 
 async function getAISettings() {
-  const defaultModel = process.env.OPENAI_MODEL || 'gpt-5-mini';
+  const defaultModel = process.env.OPENAI_MODEL || 'openai/gpt-4o';
   let settings = await prisma.aISettings.findFirst();
   if (!settings) {
     settings = await prisma.aISettings.create({
       data: {
-        provider: process.env.AI_PROVIDER || 'openai',
+        provider: process.env.AI_PROVIDER || 'openrouter',
         patientModel: defaultModel,
         examinerModel: defaultModel,
       },
@@ -852,13 +852,17 @@ async function getAISettings() {
   return {
     ...settings,
     // Explicit environment provider wins locally/deployment; admin setting is fallback.
-    provider: process.env.AI_PROVIDER || settings.provider || 'openai',
+    provider: process.env.AI_PROVIDER || settings.provider || 'openrouter',
     patientModel:
       process.env.OPENAI_PATIENT_MODEL ||
       settings.patientModel ||
-      'gpt-4o-mini',
-    examinerModel: process.env.OPENAI_EXAMINER_MODEL || process.env.OPENAI_MODEL || settings.examinerModel || defaultModel,
-    maxContextMessages: settings.maxContextMessages ?? 12,
+      'openai/gpt-4o',
+    examinerModel:
+      process.env.OPENAI_EXAMINER_MODEL ||
+      process.env.OPENAI_MODEL ||
+      settings.examinerModel ||
+      defaultModel,
+    maxContextMessages: settings.maxContextMessages ?? 16,
     openRouterApiKey:
       process.env.OPENROUTER_API_KEY?.trim() ||
       (settings as { openRouterApiKey?: string | null }).openRouterApiKey?.trim() ||

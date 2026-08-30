@@ -27,9 +27,9 @@ ENV DATABASE_URL="file:/app/prisma/dev.db"
 ENV JWT_SECRET="synoza-jwt-default-secret-key-super-secure-2026"
 ENV AI_PROVIDER="openrouter"
 ENV OPENROUTER_API_KEY="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"
-ENV OPENROUTER_FALLBACK_MODEL="openai/gpt-4o-mini"
-ENV OPENAI_MODEL="openai/gpt-4o-mini"
-ENV OPENAI_PATIENT_MODEL="openai/gpt-4o-mini"
+ENV OPENROUTER_FALLBACK_MODEL="openai/gpt-4o"
+ENV OPENAI_MODEL="openai/gpt-4o"
+ENV OPENAI_PATIENT_MODEL="openai/gpt-4o"
 EXPOSE 5000
 
 CMD ["npm", "start"]

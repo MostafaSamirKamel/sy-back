@@ -465,8 +465,8 @@ Do NOT volunteer the diagnosis. Answer in Egyptian Arabic when student uses Arab
     }
   }
 
-  const aiProvider = process.env.AI_PROVIDER || 'openai';
-  const aiModel = process.env.OPENAI_MODEL || 'gpt-realtime-mini';
+  const aiProvider = process.env.AI_PROVIDER || 'openrouter';
+  const aiModel = process.env.OPENAI_MODEL || 'openai/gpt-4o';
   const existingAI = await prisma.aISettings.findFirst();
   if (existingAI) {
     await prisma.aISettings.update({
