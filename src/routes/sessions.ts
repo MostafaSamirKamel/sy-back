@@ -50,14 +50,12 @@ function canStartManeuver(_maneuverId: string, _completed: string[]) {
 
 router.use(authenticate);
 
-// This configuration-only endpoint intentionally exposes no provider credential.
-// It lets the browser select the request/response experiment instead of WebRTC.
-router.get('/:id/voice-provider', async (req, res) => {
-  const session = await prisma.session.findFirst({
-    where: { id: req.params.id, userId: req.user!.id, status: 'IN_PROGRESS' },
-    select: { id: true },
-  });
-  if (!session) return res.status(404).json({ error: 'Active session not found' });
+// Configuration endpoint: exposes whether openrouter_audio or openai_realtime is enabled.
+router.get('/voice-provider', (_req, res) => {
+  res.json({ provider: isOpenRouterAudioEnabled() ? 'openrouter_audio' : 'openai_realtime' });
+});
+
+router.get('/:id/voice-provider', (_req, res) => {
   res.json({ provider: isOpenRouterAudioEnabled() ? 'openrouter_audio' : 'openai_realtime' });
 });
 
