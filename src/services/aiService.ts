@@ -5624,12 +5624,14 @@ export function getManeuverCompletionState(
   const physicalExam = parsePhysicalExamForm(caseData.physicalExam);
   const modelAnswer = physicalExam[maneuverId as keyof typeof physicalExam]?.trim() || '';
   const coverage = scoreManeuverAnswerAgainstExpected(studentAnswers.join('\n'), modelAnswer);
-  const complete = modelAnswer.length > 0 && coverage.matched.length > 0 && coverage.missing.length === 0;
+  const complete =
+    (modelAnswer.length > 0 && coverage.matched.length > 0 && coverage.missing.length === 0) ||
+    studentAnswers.length >= 2;
   return {
     complete,
     demonstrated: coverage.matched,
     missing: coverage.missing,
-    // Never send the reference findings back while an attempt is in progress.
+    // Provide model answer once step is completed.
     modelAnswer: complete ? modelAnswer : '',
   };
 }
@@ -6557,95 +6559,93 @@ export async function getManeuverExaminerResponse(
   history: { role: string; content: string }[],
   _language: Language,
   usageMeta?: Omit<AiUsageMeta, 'feature'>,
-  writtenProgressiveProbing = false,
+  _writtenProgressiveProbing = false,
 ): Promise<string> {
+  const settings = await getAISettings();
   const name = maneuverLabel(maneuverId, false, caseData.stationConfig);
   const physicalExam = parsePhysicalExamForm(caseData.physicalExam);
   const maneuverFindings =
     physicalExam[maneuverId as keyof typeof physicalExam]?.trim() || '';
 
-  const priorStudentTurns = history
-    .filter((m) => {
-      const role = String(m.role || '').toUpperCase();
-      return role === 'STUDENT' || role === 'USER';
-    })
-    .map((m) => normalizeVivaStudentText(m.content))
-    .filter(Boolean);
-  const current = normalizeVivaStudentText(question);
-  const combinedFindings = [...priorStudentTurns, current].filter(Boolean).join('\n');
-  const demonstratedCoverage = writtenProgressiveProbing
-    ? scoreManeuverAnswerAgainstExpected(combinedFindings, maneuverFindings)
-    : null;
+  const studentTurnsCount = history.filter(
+    (m) => String(m.role || '').toUpperCase() === 'STUDENT',
+  ).length;
+  const isFinalTurn = studentTurnsCount >= 2;
 
-  if (studentGaveUpAnswer(current)) {
-    const lastExaminerMsg = [...history]
-      .reverse()
-      .find((m) => {
-        const role = String(m.role || '').toUpperCase();
-        return role === 'EXAMINER' || role === 'ASSISTANT';
-      });
+  const isAr =
+    String(_language || '').toUpperCase() === 'AR' ||
+    /[\u0600-\u06FF]/.test(question);
 
-    const isAr = String(_language || '').toUpperCase() === 'AR';
+  const langInstruction = isAr
+    ? 'Respond in clear Egyptian medical Arabic, utilizing standard English medical terminology where appropriate (e.g. murmur, crackles, dullness, surgical scar).'
+    : 'Respond in professional medical English appropriate for an OSCE examiner.';
 
-    if (lastExaminerMsg?.content && maneuverFindings) {
-      const specificAnswer = await resolveSpecificManeuverAnswer(
-        lastExaminerMsg.content,
-        maneuverFindings,
-        caseData,
-        name,
-        _language,
-      );
+  const systemPrompt = `You are an expert Clinical OSCE Examiner interacting with a medical student during the physical examination step: "${name}".
 
-      if (specificAnswer) {
-        return unwrapExaminerPlainText(
-          isAr
-            ? `مفيش مشكلة — الإجابة الصحيحة:\n${specificAnswer}`
-            : `No problem — here is the expected answer:\n${specificAnswer}`,
-        );
-      }
-    }
+Station Clinical Context:
+- Case Diagnosis: ${caseData.finalDiagnosis}
+- Expected Findings for ${name}:
+"""
+${maneuverFindings || 'Standard systematic examination findings.'}
+"""
 
-    if (maneuverFindings) {
-      return unwrapExaminerPlainText(
-        isAr
-          ? `مفيش مشكلة — نتائج فحص ${name} المتوقعة:\n${maneuverFindings}`
-          : `No problem — here are the expected ${name} findings:\n${maneuverFindings}`,
-      );
-    }
-    return unwrapExaminerPlainText(
-      isAr
-        ? `تمام — كويس إنك تقول لما مش عارف. في ${name}، راجع العلامات السريرية ونقدر نكمل.`
-        : `That's fine — it's good to say when you're unsure. For ${name}, review the key clinical signs linked to this case and we can continue.`,
+YOUR MANDATORY INTERACTION PROTOCOL:
+1. Assess the student's answer or observation against the expected clinical findings.
+2. IF the student's answer is INCORRECT, PARTIAL, or if they gave up / said "I don't know" / "مش عارف":
+   - State the concise, direct CORRECT clinical finding/answer clearly without delay or harsh scolding (e.g. "That is not quite right. The expected finding is: [clear answer]" / "الإجابة الصحيحة هي: [الإجابة]").
+   - ${isFinalTurn ? 'Conclude this examination step by confirming key findings have been evaluated and instructing the student to move to the next examination step.' : 'Immediately follow up by asking the NEXT specific clinical question about this examination station.'}
+3. IF the student's answer is CORRECT:
+   - Provide brief, positive affirmation (e.g. "Correct." / "تمام، إجابة صحيحة.").
+   - ${isFinalTurn ? 'Conclude this examination step by confirming key findings have been evaluated and instructing the student to move to the next examination step.' : 'Immediately follow up by asking the NEXT specific clinical question about this examination station.'}
+
+Format: Plain conversational text (2 to 4 sentences). Never repeat already asked questions.
+${langInstruction}`;
+
+  const chatMessages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    ...history.slice(-6).map((m) => ({
+      role: String(m.role || '').toUpperCase() === 'EXAMINER' ? ('assistant' as const) : ('user' as const),
+      content: m.content,
+    })),
+    { role: 'user', content: question },
+  ];
+
+  try {
+    const raw = await callOpenAI(
+      chatMessages,
+      settings.examinerModel,
+      0.3,
+      250,
+      usageMeta ? { ...usageMeta, feature: 'examiner_viva' } : undefined,
     );
+    if (raw && raw.trim()) {
+      return unwrapExaminerPlainText(raw.trim());
+    }
+  } catch (err) {
+    console.error('[getManeuverExaminerResponse] LLM call failed, falling back to rule-based response:', err);
   }
 
-  const prompt = `You are evaluating the student's spoken findings for the "${name}" physical-examination step. Score clinical MEANING against the expected findings — not keywords alone.`;
-
-  const rawEvaluation = await evaluateOsceMeaningTurn({
-    caseData,
-    question: prompt,
-    studentAnswer: current,
-    combinedAnswer: combinedFindings,
-    sampleAnswer: maneuverFindings,
-    stationLabel: `Examination — ${name}`,
-    usageMeta,
-  });
-  // The general viva evaluator is intentionally flexible for prose answers.
-  // For a written maneuver it cannot override stricter demonstrated-only
-  // component coverage from the current session transcript.
-  const evaluation = demonstratedCoverage && demonstratedCoverage.missing.length > 0
-    ? { ...rawEvaluation, advance: false }
-    : rawEvaluation;
-
-  if (evaluation.advance) {
-    return unwrapExaminerPlainText(
-      `${evaluation.feedback} Let's move on when you're ready — you can refine technique or continue to the next examination step.`,
-    );
+  // Deterministic fallback
+  if (studentGaveUpAnswer(question)) {
+    if (isFinalTurn) {
+      return isAr
+        ? `الإجابة الصحيحة لفحص ${name} هي:\n${maneuverFindings || 'فحص سليم'}\n\nأحسنت، كده اكتمل فحص ${name}. يمكنك الانتقال للخطوة التالية.`
+        : `The expected finding for ${name} is:\n${maneuverFindings || 'Normal examination findings.'}\n\nWell done, that completes ${name}. You can proceed to the next examination step.`;
+    }
+    return isAr
+      ? `الإجابة الصحيحة لفحص ${name} هي:\n${maneuverFindings || 'فحص سليم'}\n\nالسؤال التالي: ما هي العلامة أو التقنية السريرية التالية التي ستقيمها؟`
+      : `The expected finding for ${name} is:\n${maneuverFindings || 'Normal examination findings.'}\n\nNext question: What specific sign or technique would you evaluate next?`;
   }
-  const progressiveFeedback = writtenProgressiveProbing
-    ? buildProgressiveManeuverFeedback(current, combinedFindings, maneuverFindings)
-    : null;
-  return unwrapExaminerPlainText(progressiveFeedback || evaluation.feedback);
+
+  if (isFinalTurn) {
+    return isAr
+      ? `تمام، كده فحص ${name} اكتمل بشكل جيد. يمكنك الانتقال للخطوة التالية في الفحص.`
+      : `Good, that completes the ${name} examination. You can move to the next examination step.`;
+  }
+
+  return isAr
+    ? `الإجابة الصحيحة: ${maneuverFindings || 'فحص سليم'}.\n\nالسؤال التالي: ما الذي تتوقع ملاحظته في باقي الفحص؟`
+    : `The correct finding: ${maneuverFindings || 'Normal findings'}.\n\nNext question: What further signs would you look for?`;
 }
 
 export async function generateVivaModelAnswer(
