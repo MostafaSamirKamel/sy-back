@@ -6481,8 +6481,25 @@ async function resolveSpecificManeuverAnswer(
       questionAsked,
     );
 
+  const rawFindings = stripMarkdown(maneuverFindings).trim();
+  const sentences = rawFindings
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim().replace(/[.!?]+$/g, ''))
+    .filter(Boolean);
+
   if (isGeneralStepOpening) {
-    return maneuverFindings;
+    const positiveSentence = sentences.find(
+      (s: string) =>
+        !s.toLowerCase().startsWith('no ') &&
+        !s.toLowerCase().includes('mildly tachypneic cooperative') &&
+        !s.toLowerCase().includes('normal chest wall'),
+    );
+    if (positiveSentence) {
+      return isAr
+        ? `العلامة الأساسية في هذا الفحص:\n${positiveSentence}`
+        : `Key finding for this step:\n${positiveSentence}`;
+    }
+    return sentences[0] || maneuverFindings;
   }
 
   const settings = await getAISettings();
