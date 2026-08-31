@@ -5705,14 +5705,15 @@ export function getManeuverCompletionState(
   const physicalExam = parsePhysicalExamForm(caseData.physicalExam);
   const modelAnswer = physicalExam[maneuverId as keyof typeof physicalExam]?.trim() || '';
   const coverage = scoreManeuverAnswerAgainstExpected(studentAnswers.join('\n'), modelAnswer);
-  const complete =
-    (modelAnswer.length > 0 && coverage.matched.length > 0 && coverage.missing.length === 0) ||
-    studentAnswers.length >= 2;
+  const hasDemonstratedAll =
+    modelAnswer.length > 0 && coverage.matched.length > 0 && coverage.missing.length === 0;
+  const gaveUp = studentAnswers.some((ans) => studentGaveUpAnswer(ans));
+  const complete = hasDemonstratedAll || (gaveUp && studentAnswers.length >= 2);
   return {
     complete,
     demonstrated: coverage.matched,
     missing: coverage.missing,
-    // Provide model answer once step is completed.
+    // Provide model answer ONLY once the entire step is completely finished
     modelAnswer: complete ? modelAnswer : '',
   };
 }
@@ -6628,10 +6629,14 @@ export async function getManeuverExaminerResponse(
   const maneuverFindings =
     physicalExam[maneuverId as keyof typeof physicalExam]?.trim() || '';
 
-  const studentTurnsCount = history.filter(
-    (m) => String(m.role || '').toUpperCase() === 'STUDENT',
-  ).length;
-  const isFinalTurn = studentTurnsCount >= 2;
+  const allStudentText = history
+    .filter((m) => String(m.role || '').toUpperCase() === 'STUDENT')
+    .map((m) => m.content)
+    .concat(question)
+    .join('\n');
+  const coverage = scoreManeuverAnswerAgainstExpected(allStudentText, maneuverFindings);
+  const isAllAnswered =
+    maneuverFindings.length > 0 && coverage.matched.length > 0 && coverage.missing.length === 0;
 
   const isAr =
     String(_language || '').toUpperCase() === 'AR' ||
@@ -6643,31 +6648,33 @@ export async function getManeuverExaminerResponse(
 
   const systemPrompt = `You are an expert Clinical OSCE Examiner conducting an interactive physical examination station for "${name}".
 
-Patient Case & Expected Findings for ${name}:
+Patient Case & Expected Findings for "${name}":
 - Diagnosis: ${caseData.finalDiagnosis}
 - Expected Reference Findings:
 """
 ${maneuverFindings || 'Standard examination findings.'}
 """
 
-EXAMINER INTERACTION & COACHING RULES:
-1. Understand and analyze the student's observation:
-   - If the student observes a CORRECT point (even if partial, like "no precordial bulge", "scar on left side", "tachypneic", "murmur heard at apex"):
-     - Positively acknowledge that specific finding (e.g. "Good, no precordial bulge is noted." / "تمام، ملاحظة صحيحة بخصوص عدم وجود precordial bulge.").
-     - ${isFinalTurn ? 'Summarize the step and instruct the student to move to the next examination maneuver.' : 'Ask a guiding follow-up question to probe for another specific finding they need to look for (e.g. asking about scars, respiratory pattern, deformities, etc.).'}
-     - NEVER dump the entire model answer paragraph on a partial answer!
-   - If the student makes an INCORRECT observation (e.g. claiming a sign that does not exist):
-     - Correct that specific point politely without being harsh (e.g. "Take another close look at the image — that sign is not present. What do you notice along the lateral chest wall?").
-   - ONLY if the student explicitly says "I don't know" / "مش عارف" / "idk":
-     - Provide the concise expected finding for what was being discussed.
-   - ${isFinalTurn ? 'Conclude the station encouragingly and invite the student to proceed to the next maneuver.' : ''}
+CURRENT COVERAGE STATUS:
+- Findings covered so far by candidate: ${coverage.matched.map(shortPointLabel).join(', ') || '(none yet)'}
+- Findings still missing: ${coverage.missing.length} point(s)
 
-Style: Professional medical conversational English or Egyptian Arabic with English medical terms. 2 to 3 concise sentences. Never output raw templates or full reference text dumps.
+CRITICAL EXAMINER PROTOCOL:
+1. DO NOT END THE CONVERSATION before all questions and expected findings have been answered. Keep asking about the next specific finding until all components are covered.
+2. DO NOT REVEAL THE COMPLETE LIST OF ANSWERS until the very end when all findings are complete.
+3. PRESENT THE ASSESSMENT TO EACH QUESTION INDIVIDUALLY:
+   - If the student's observation is INCOMPLETE: acknowledge only what was correct, and ask them to complete the missing aspect of that specific observation.
+   - If the student's observation is INCORRECT: correct ONLY that specific incorrect answer politely, and ask them to re-examine or try again without revealing the rest of the findings.
+   - If the student says "I don't know" / "مش عارف" / "idk": provide the answer to ONLY that specific question, then immediately ask the next question about the remaining unexamined findings.
+4. FINAL CONCLUSION (ONLY WHEN ALL POINTS ARE COVERED):
+   ${isAllAnswered ? '- The student has now covered all expected findings. Confirm the completion of this step with a short concluding summary and instruct them to proceed to the next examination maneuver.' : '- Since findings are still missing, ask a focused clinical question for the NEXT unmentioned finding.'}
+
+Style: Professional medical conversational English or Egyptian medical Arabic with English terms. 2 to 3 concise sentences. Never output raw templates or full reference text dumps.
 ${langInstruction}`;
 
   const chatMessages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
-    ...history.slice(-6).map((m) => ({
+    ...history.slice(-8).map((m) => ({
       role: String(m.role || '').toUpperCase() === 'EXAMINER' ? ('assistant' as const) : ('user' as const),
       content: m.content,
     })),
@@ -6691,9 +6698,16 @@ ${langInstruction}`;
 
   // Intelligent deterministic fallback if AI is offline
   if (studentGaveUpAnswer(question)) {
+    const missingPoints = coverage.missing;
+    if (missingPoints.length > 1) {
+      const pointToReveal = shortPointLabel(missingPoints[0]);
+      return isAr
+        ? `العلامة هنا هي: ${pointToReveal}.\n\nماذا تلاحظ بخصوص باقي الفحص؟`
+        : `The finding here is: ${pointToReveal}.\n\nWhat else do you look for in the rest of this examination?`;
+    }
     return isAr
-      ? `العلامة المتوقعة هنا: ${maneuverFindings.slice(0, 100)}.\n\nتقدر تنتقل للخطوة التالية في الفحص.`
-      : `The expected finding here is: ${maneuverFindings.slice(0, 100)}.\n\nYou may proceed to the next examination step.`;
+      ? `أحسنت، كده تم استعراض كل علامات فحص ${name}. يمكنك الانتقال للخطوة التالية.`
+      : `Well done, that completes the ${name} examination. You may proceed to the next examination step.`;
   }
 
   const qLower = question.toLowerCase();
@@ -6704,18 +6718,18 @@ ${langInstruction}`;
   }
   if (/scar|ندبة|جرح|علامة|chest\s*tube/i.test(qLower)) {
     return isAr
-      ? 'مظبوط، في ندبة سابقة لأنبوبة صدرية (chest tube scar) في الـ mid-axillary line. هل في أي علامات تانية ملاحظها؟'
-      : 'Correct, a chest tube scar is visible in the left mid-axillary line. Are there any other visible signs?';
+      ? 'مظبوط، في ندبة سابقة لأنبوبة صدرية (chest tube scar) في الـ mid-axillary line. هل تلاحظ أي علامات تنفسية أو أوردة متمددة؟'
+      : 'Correct, a chest tube scar is visible in the left mid-axillary line. Do you note any respiratory signs or dilated veins?';
   }
   if (/tachypn|نهجان|تنفس|سرعة/i.test(qLower)) {
     return isAr
       ? 'تمام، المريض عنده tachypnea خفيفة. هل تلاحظ أي تشوهات أو علامات أخرى في القفص الصدري؟'
       : 'Correct, mild tachypnea is present. Do you note any other chest wall signs or deformities?';
   }
-  if (isFinalTurn) {
+  if (isAllAnswered) {
     return isAr
-      ? 'أحسنت، كده فحص الـ ' + name + ' اكتمل بشكل سليم. تقدر تنتقل للخطوة التالية في الفحص.'
-      : `Well done, that completes the ${name} examination step. You can move to the next maneuver.`;
+      ? 'أحسنت، كده فحص الـ ' + name + ' اكتمل بالكامل وبشكل سليم. تقدر تنتقل للخطوة التالية في الفحص.'
+      : `Well done, you have covered all the findings for the ${name} examination. You can move to the next maneuver.`;
   }
 
   return isAr
