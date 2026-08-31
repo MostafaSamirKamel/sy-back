@@ -3490,11 +3490,86 @@ function getDeterministicPatientResponse(
   }
 
   if (/allerg|حساس|حساسية/i.test(text)) {
-    return isArabic ? 'لا، مفيش حساسية عندي.' : 'No, I have no known drug allergies.';
+    return isArabic ? 'لا، مفيش حساسية عندي لأي أدوية.' : 'No, I have no known drug allergies.';
   }
 
   if (/medic|drug|tablet|دوا|أدوية|ادوية/i.test(text)) {
-    return isArabic ? 'مش باخد أدوية بانتظام دلوقتي.' : 'I am not on regular medications currently.';
+    const med = caseData.medicationHistory?.trim();
+    if (med && !/none|no\s+regular|مش\s*باخد/i.test(med)) {
+      return isArabic ? `باخد ${med}.` : `I take ${med}.`;
+    }
+    return isArabic ? 'مش باخد أدوية بانتظام دلوقتي يا دكتور.' : 'I am not taking regular medications currently.';
+  }
+
+  if (/صفران|صفرا|زرقان|ازرقاق|شحوب|jaundice|cyanosis|pallor|yellow/i.test(text)) {
+    return isArabic
+      ? 'لا يا دكتور، مفيش أي صفران في عيني ولا زرقان في شفايفي أو أطرافي.'
+      : 'No jaundice or cyanosis noticed, doctor.';
+  }
+
+  if (/بتكح\s*دم|كحة\s*دم|بلغم\s*مدمم|بترجع\s*دم|ترجيع\s*دم|استفراغ\s*دم|دم\s*في\s*الترجيع|hemoptysis|hematemesis|coughing\s*blood|vomiting\s*blood/i.test(text)) {
+    return isArabic
+      ? 'لا يا دكتور، مبكحش دم ولا برجع دم الحمد لله.'
+      : 'No coughing up blood or vomiting blood, doctor.';
+  }
+
+  if (/ترجيع|بترجع|استفراغ|غممان\s*نفس|غثيان|vomit|nausea/i.test(text)) {
+    return isArabic
+      ? 'لا يا دكتور، مفيش ترجيع ولا غممان نفس.'
+      : 'No nausea or vomiting, doctor.';
+  }
+
+  if (/فحوصات|تحاليل|اشعة|أشعة|رسم\s*قلب|سونار|إيكو|ايكو|investigation|test|scan|ecg|echo|x-?ray/i.test(text)) {
+    return isArabic
+      ? 'لأ يا دكتور، دي أول مرة أجي أكشف ومعملتش أي فحوصات أو تحاليل قبل كده.'
+      : 'No prior investigations done yet, doctor; this is my first visit.';
+  }
+
+  if (/بتسلي\s*نفسك|بتقضي\s*وقتك|يومك\s*بيمشي|هوايات|hobby|hobbies|free\s*time|spare\s*time/i.test(text)) {
+    return isArabic
+      ? 'بقعد مع عيلتي في البيت وبتفرج على التلفزيون يا دكتور.'
+      : 'I mostly stay home with family and watch TV.';
+  }
+
+  if (/ألم\s*في\s*الصدر|وجع\s*في\s*صدرك|نغزة|صدرك\s*بيوجعك|chest\s*pain|angina/i.test(text)) {
+    const medHistory = (caseData.medicalHistory || '').toLowerCase();
+    const chief = (caseData.chiefComplaint || '').toLowerCase();
+    if (/angina|chest pain|ألم\s*في\s*الصدر|وجع/i.test(medHistory) || /chest pain|ألم\s*في\s*الصدر|وجع/i.test(chief)) {
+      return isArabic
+        ? 'أيوه يا دكتور، بحس بوجع وضيق في نص صدري مع المجهود وبيخف لما برتاح.'
+        : 'Yes doctor, I feel chest tightness on exertion that relieves with rest.';
+    }
+    return isArabic ? 'لا مفيش ألم في الصدر يا دكتور.' : 'No chest pain, doctor.';
+  }
+
+  if (/ضربات\s*قلب|خفقان|رفرفة|دقات\s*قلبك|palpitation/i.test(text)) {
+    return isArabic
+      ? 'أوقات بحس بضربات قلبي سريعة ورفرفة مع المجهود.'
+      : 'I sometimes feel palpitations and rapid heartbeat with exertion.';
+  }
+
+  if (/تورم|ورم|تضخم|رجليك\s*وارمة|edema|swelling/i.test(text)) {
+    return isArabic
+      ? 'عندي ورم خفيف في رجليا الاتنين بيزيد مع الوقوف وآخر اليوم.'
+      : 'I have some mild bilateral leg swelling, worse by the end of the day.';
+  }
+
+  if (/إمساك|اسهال|إسهال|بول|حمام|حرقان\s*بول|bowel|bladder|urination/i.test(text)) {
+    return isArabic
+      ? 'البول والبراز طبيعيين مفيش فيهم أي مشكلة يا دكتور.'
+      : 'Bowel and bladder habits are normal, doctor.';
+  }
+
+  if (/سخونية|حرارة|حمى|قشعريرة|fever|chills/i.test(text)) {
+    return isArabic
+      ? 'لا يا دكتور، مقستش حرارة ومحستش بسخونية أو قشعريرة.'
+      : 'No fever or chills, doctor.';
+  }
+
+  if (/وزنك\s*قل|خسيت|شهيتك|أكلك|weight\s*loss|appetite/i.test(text)) {
+    return isArabic
+      ? 'الشهية كويسة ومفيش نزول ملحوظ في الوزن.'
+      : 'Appetite is normal with no significant weight change.';
   }
 
   if (asksFamilyHistory(text)) {
@@ -3541,6 +3616,10 @@ function mockPatientResponse(
     return isArabic ? 'أهلاً يا دكتور.' : 'Hello doctor.';
   }
 
+  // Priority 1: Check deterministic and multi-part handlers first
+  const deterministic = getDeterministicPatientResponse(caseData, userMessage, language, history, false);
+  if (deterministic !== null) return deterministic;
+
   const intent = resolvePrimaryPatientQuestionIntent(userMessage);
 
   if (intent === 'wellbeing') {
@@ -3565,26 +3644,14 @@ function mockPatientResponse(
       : `My name is ${caseData.patientName}.`;
   }
 
-  const deterministic = getDeterministicPatientResponse(caseData, userMessage, language, history, false);
-  if (deterministic !== null) return deterministic;
-
   if (isVagueStudentMessage(userMessage)) {
-    return isArabic ? 'مش فاهم قصدك يا دكتور، ممكن توضّح سؤالك؟' : 'Could you clarify your question, doctor?';
+    return isArabic ? 'ممكن توضّح سؤالك أكتر يا دكتور؟' : 'Could you clarify your question, doctor?';
   }
 
-  const fallbacks = isArabic
-    ? [
-        'ممكن توضّح سؤالك أكتر يا دكتور؟',
-        'مش فاهم قصدك، ممكن تسأل بطريقة أوضح؟',
-        'أنا هنا — اسألني اللي محتاج تعرفه.',
-      ]
-    : [
-        'Could you clarify your question?',
-        'I am not sure what you mean — please ask more specifically.',
-        'I am here — please ask what you need to know.',
-      ];
-
-  return fallbacks[studentTurn % fallbacks.length];
+  // Sensible default answering safely in character instead of pretending not to understand
+  return isArabic
+    ? 'تمام يا دكتور، غير كده مفيش أعراض تانية حاسس بيها.'
+    : 'Everything else feels normal, doctor.';
 }
 
 export function buildRealtimePatientInstructions(caseData: Case, sessionLanguage: string): string {
