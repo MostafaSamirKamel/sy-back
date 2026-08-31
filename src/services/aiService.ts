@@ -1064,35 +1064,39 @@ async function callOpenAI(
     });
   };
 
-  try {
-    let response = (await run(model, maxTokens)) as ChatCompletion;
-    let text = extractCompletionText(response);
-    if (!text && model !== fallbackModel) {
-      response = (await run(fallbackModel, Math.max(maxTokens, 220))) as ChatCompletion;
-      text = extractCompletionText(response);
-      record(fallbackModel, response, !!text, text ? undefined : 'empty model response');
-    } else {
-      record(model, response, !!text, text ? undefined : 'empty model response');
+  const tryCandidateModels = [
+    model,
+    ...(model !== fallbackModel ? [fallbackModel] : []),
+    'minimax/minimax-m3:free',
+    'google/gemma-4-26b-a4b-it:free',
+  ];
+
+  let lastError: unknown = null;
+  for (const candidate of tryCandidateModels) {
+    try {
+      const response = (await run(candidate, maxTokens)) as ChatCompletion;
+      const text = extractCompletionText(response);
+      if (text && text.trim()) {
+        record(candidate, response, true);
+        return text.trim();
+      }
+    } catch (error) {
+      lastError = error;
+      console.warn(`[callOpenAI] Model ${candidate} failed:`, error instanceof Error ? error.message : error);
     }
-    return text;
-  } catch (error) {
-    if (model !== fallbackModel && /realtime|gpt-5/i.test(model)) {
-      const response = (await run(fallbackModel, Math.max(maxTokens, 220))) as ChatCompletion;
-      record(fallbackModel, response, true);
-      return extractCompletionText(response);
-    }
-    if (usageMeta) {
-      void logAiUsage({
-        feature: usageMeta.feature,
-        model,
-        userId: usageMeta.userId,
-        sessionId: usageMeta.sessionId,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-    throw error;
   }
+
+  if (usageMeta) {
+    void logAiUsage({
+      feature: usageMeta.feature,
+      model,
+      userId: usageMeta.userId,
+      sessionId: usageMeta.sessionId,
+      success: false,
+      error: lastError instanceof Error ? lastError.message : String(lastError),
+    });
+  }
+  throw (lastError || new Error('All AI models failed'));
 }
 
 async function callOpenAIStream(
@@ -2305,7 +2309,17 @@ function combinedCaseClinicalText(caseData: Case): string {
     .join(' ');
 }
 
-function patientOnsetDurationPhrase(caseData: Case, isArabic: boolean): string {
+function patientOnsetDurationPhrase(caseData: Case, isArabic: boolean, userMessage = ''): string {
+  const isMode = /مرة\s*واحدة|فجأة|فجاة|تدريج|بالتدريج|sudden|gradual|insidious|how.*start|بدأ\s*إزاي|بدا\s*ازاي/i.test(userMessage);
+  if (isMode) {
+    const history = (caseData.medicalHistory || '').toLowerCase();
+    const isSudden = /sudden|abrupt|فجأة|فجاة|مرة واحدة/i.test(history);
+    if (isSudden) {
+      return isArabic ? 'بدأ معايا فجأة مرة واحدة يا دكتور.' : 'It started suddenly, doctor.';
+    }
+    return isArabic ? 'بدأ معايا بالتدريج يا دكتور وزاد مع الوقت والمجهود.' : 'It started gradually and worsened over time, doctor.';
+  }
+
   const chief = caseData.chiefComplaint || '';
   const history = caseData.medicalHistory || '';
   const source = `${chief} ${history}`;
@@ -2316,8 +2330,8 @@ function patientOnsetDurationPhrase(caseData: Case, isArabic: boolean): string {
 
   if (!match) {
     return isArabic
-      ? 'بقالي كام يوم كده يا دكتور.'
-      : 'It has been a few days, doctor.';
+      ? 'بقالي حوالي أسبوعين يا دكتور.'
+      : 'It has been about two weeks, doctor.';
   }
 
   const n = Number(match[1]);
