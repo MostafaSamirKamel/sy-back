@@ -6294,11 +6294,6 @@ ${modelAnswerBlock}${coverageHint}${knowledgeContext}`,
 
   const parsed = parseVivaAnswerEvaluation(raw, () => local);
 
-  // If local already has full coverage, prefer completion (synonyms may be clearer locally).
-  if (sampleAnswer.trim() && local.advance) {
-    return { advance: true, feedback: unwrapExaminerPlainText(local.feedback) };
-  }
-
   // Hard safety: wrong definition / negation must never advance.
   if (sampleAnswer.trim()) {
     const wrongDefinitionFeedback = findWrongLabeledDefinitionFeedback(current, sampleAnswer);
@@ -6313,24 +6308,9 @@ ${modelAnswerBlock}${coverageHint}${knowledgeContext}`,
     feedbackLeaksMissingPoints(parsed.feedback, combined, sampleAnswer)
   ) {
     return {
-      advance: local.advance,
-      feedback: unwrapExaminerPlainText(local.feedback),
-    };
-  }
-
-  // If LLM claims complete, allow advance unless local explicitly sees 0 matching points on multi-point keys
-  if (
-    sampleAnswer.trim() &&
-    parsed.advance &&
-    localCoverage.missing.length >= 3 &&
-    localCoverage.matched.length === 0 &&
-    localCoverage.coverage < 0.2
-  ) {
-    return {
       advance: false,
       feedback: unwrapExaminerPlainText(
-        local.feedback ||
-          'Good progress so far. Keep going — more expected points are still missing.',
+        'Not complete yet — try focusing on the specific clinical distinction and try again.',
       ),
     };
   }
