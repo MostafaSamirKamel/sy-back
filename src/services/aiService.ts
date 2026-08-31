@@ -6641,25 +6641,28 @@ export async function getManeuverExaminerResponse(
     ? 'Respond in clear Egyptian medical Arabic, utilizing standard English medical terminology where appropriate (e.g. murmur, crackles, dullness, surgical scar).'
     : 'Respond in professional medical English appropriate for an OSCE examiner.';
 
-  const systemPrompt = `You are an expert Clinical OSCE Examiner interacting with a medical student during the physical examination step: "${name}".
+  const systemPrompt = `You are an expert Clinical OSCE Examiner conducting an interactive physical examination station for "${name}".
 
-Station Clinical Context:
-- Case Diagnosis: ${caseData.finalDiagnosis}
-- Expected Findings for ${name}:
+Patient Case & Expected Findings for ${name}:
+- Diagnosis: ${caseData.finalDiagnosis}
+- Expected Reference Findings:
 """
-${maneuverFindings || 'Standard systematic examination findings.'}
+${maneuverFindings || 'Standard examination findings.'}
 """
 
-YOUR MANDATORY INTERACTION PROTOCOL:
-1. Assess the student's answer or observation against the expected clinical findings.
-2. IF the student's answer is INCORRECT, PARTIAL, or if they gave up / said "I don't know" / "مش عارف":
-   - State the concise, direct CORRECT clinical finding/answer clearly without delay or harsh scolding (e.g. "That is not quite right. The expected finding is: [clear answer]" / "الإجابة الصحيحة هي: [الإجابة]").
-   - ${isFinalTurn ? 'Conclude this examination step by confirming key findings have been evaluated and instructing the student to move to the next examination step.' : 'Immediately follow up by asking the NEXT specific clinical question about this examination station.'}
-3. IF the student's answer is CORRECT:
-   - Provide brief, positive affirmation (e.g. "Correct." / "تمام، إجابة صحيحة.").
-   - ${isFinalTurn ? 'Conclude this examination step by confirming key findings have been evaluated and instructing the student to move to the next examination step.' : 'Immediately follow up by asking the NEXT specific clinical question about this examination station.'}
+EXAMINER INTERACTION & COACHING RULES:
+1. Understand and analyze the student's observation:
+   - If the student observes a CORRECT point (even if partial, like "no precordial bulge", "scar on left side", "tachypneic", "murmur heard at apex"):
+     - Positively acknowledge that specific finding (e.g. "Good, no precordial bulge is noted." / "تمام، ملاحظة صحيحة بخصوص عدم وجود precordial bulge.").
+     - ${isFinalTurn ? 'Summarize the step and instruct the student to move to the next examination maneuver.' : 'Ask a guiding follow-up question to probe for another specific finding they need to look for (e.g. asking about scars, respiratory pattern, deformities, etc.).'}
+     - NEVER dump the entire model answer paragraph on a partial answer!
+   - If the student makes an INCORRECT observation (e.g. claiming a sign that does not exist):
+     - Correct that specific point politely without being harsh (e.g. "Take another close look at the image — that sign is not present. What do you notice along the lateral chest wall?").
+   - ONLY if the student explicitly says "I don't know" / "مش عارف" / "idk":
+     - Provide the concise expected finding for what was being discussed.
+   - ${isFinalTurn ? 'Conclude the station encouragingly and invite the student to proceed to the next maneuver.' : ''}
 
-Format: Plain conversational text (2 to 4 sentences). Never repeat already asked questions.
+Style: Professional medical conversational English or Egyptian Arabic with English medical terms. 2 to 3 concise sentences. Never output raw templates or full reference text dumps.
 ${langInstruction}`;
 
   const chatMessages: ChatMessage[] = [
@@ -6686,27 +6689,38 @@ ${langInstruction}`;
     console.error('[getManeuverExaminerResponse] LLM call failed, falling back to rule-based response:', err);
   }
 
-  // Deterministic fallback
+  // Intelligent deterministic fallback if AI is offline
   if (studentGaveUpAnswer(question)) {
-    if (isFinalTurn) {
-      return isAr
-        ? `الإجابة الصحيحة لفحص ${name} هي:\n${maneuverFindings || 'فحص سليم'}\n\nأحسنت، كده اكتمل فحص ${name}. يمكنك الانتقال للخطوة التالية.`
-        : `The expected finding for ${name} is:\n${maneuverFindings || 'Normal examination findings.'}\n\nWell done, that completes ${name}. You can proceed to the next examination step.`;
-    }
     return isAr
-      ? `الإجابة الصحيحة لفحص ${name} هي:\n${maneuverFindings || 'فحص سليم'}\n\nالسؤال التالي: ما هي العلامة أو التقنية السريرية التالية التي ستقيمها؟`
-      : `The expected finding for ${name} is:\n${maneuverFindings || 'Normal examination findings.'}\n\nNext question: What specific sign or technique would you evaluate next?`;
+      ? `العلامة المتوقعة هنا: ${maneuverFindings.slice(0, 100)}.\n\nتقدر تنتقل للخطوة التالية في الفحص.`
+      : `The expected finding here is: ${maneuverFindings.slice(0, 100)}.\n\nYou may proceed to the next examination step.`;
   }
 
+  const qLower = question.toLowerCase();
+  if (/precordial|bulge|انتفاخ|بروز/i.test(qLower)) {
+    return isAr
+      ? 'تمام، ملاحظة صحيحة بخصوص عدم وجود precordial bulge. ماذا تلاحظ بخصوص أي ندبات جراحية (scars) أو علامات على جدار الصدر؟'
+      : 'Good observation, no precordial bulge is noted. What do you observe regarding any surgical scars or chest wall marks?';
+  }
+  if (/scar|ندبة|جرح|علامة|chest\s*tube/i.test(qLower)) {
+    return isAr
+      ? 'مظبوط، في ندبة سابقة لأنبوبة صدرية (chest tube scar) في الـ mid-axillary line. هل في أي علامات تانية ملاحظها؟'
+      : 'Correct, a chest tube scar is visible in the left mid-axillary line. Are there any other visible signs?';
+  }
+  if (/tachypn|نهجان|تنفس|سرعة/i.test(qLower)) {
+    return isAr
+      ? 'تمام، المريض عنده tachypnea خفيفة. هل تلاحظ أي تشوهات أو علامات أخرى في القفص الصدري؟'
+      : 'Correct, mild tachypnea is present. Do you note any other chest wall signs or deformities?';
+  }
   if (isFinalTurn) {
     return isAr
-      ? `تمام، كده فحص ${name} اكتمل بشكل جيد. يمكنك الانتقال للخطوة التالية في الفحص.`
-      : `Good, that completes the ${name} examination. You can move to the next examination step.`;
+      ? 'أحسنت، كده فحص الـ ' + name + ' اكتمل بشكل سليم. تقدر تنتقل للخطوة التالية في الفحص.'
+      : `Well done, that completes the ${name} examination step. You can move to the next maneuver.`;
   }
 
   return isAr
-    ? `الإجابة الصحيحة: ${maneuverFindings || 'فحص سليم'}.\n\nالسؤال التالي: ما الذي تتوقع ملاحظته في باقي الفحص؟`
-    : `The correct finding: ${maneuverFindings || 'Normal findings'}.\n\nNext question: What further signs would you look for?`;
+    ? 'ملاحظة جيدة. ركز على فحص جدار الصدر والندبات الجراحية ومعدل التنفس، إيه اللي شايفه كمان؟'
+    : 'Good observation. Focus systematically on chest wall signs, scars, and respiratory rate — what else do you observe?';
 }
 
 export async function generateVivaModelAnswer(
