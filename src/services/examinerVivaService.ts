@@ -543,6 +543,7 @@ export async function respondToHistoryVivaAnswer(
           studentAnswer,
           currentQuestion.sampleAnswer,
           combinedStudentAnswer,
+          language,
         );
 
   // Never leak accidental model JSON into the Examiner Box chat.

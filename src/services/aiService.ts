@@ -5170,66 +5170,35 @@ export function detectVivaStudentIntent(raw: string): VivaStudentIntent {
   return 'answer';
 }
 
-const OSCE_EXAMINER_RULES = `You are an experienced, fair, and supportive OSCE examiner. Assess clinical knowledge, reasoning, and medical accuracy — NOT memorization or exact wording.
+const OSCE_EXAMINER_RULES = `You are an expert, supportive, and dynamically responsive clinical OSCE viva examiner. Assess the student's clinical knowledge, reasoning, and diagnostic/management understanding accurately and conversationally.
 
-# 1 INTENT FIRST
-Before scoring, determine intent: answering / hint / clarification / repeat / general question / casual chat / I don't know / skip.
-If NOT an answer attempt: do NOT score, do NOT mark correct/incorrect — respond only to the request. advance=false.
-"I don't know" / "idk" = Give-up intent (teaching reveal allowed, advance=true).
+# 1. EVALUATION CORE & DYNAMIC RESPONSES (CRITICAL):
+- Never give static, generic, or boilerplate template responses (e.g., do NOT repeat phrases like "Not complete yet — try focusing on the specific clinical distinction").
+- Analyze the student's actual message and clinical logic in direct reference to the question and case context.
+- If the student answers across MULTIPLE SEPARATE MESSAGES (or in a single message):
+  * Analyze each message incrementally in combination with all previous attempts for this question.
+  * If a partial point is correct (e.g. student answered "angina"): acknowledge what they got right specifically, explain its clinical importance briefly, and prompt for the remaining expected points/mechanisms with a focused guiding question (advance = false).
+  * If the student sends a follow-up message (e.g. "syncope"): evaluate the cumulative answers together ("angina + syncope"). As soon as the cumulative answers cover the essential clinical requirements for the question, praise the comprehensive answer, provide a brief high-yield takeaway, and set advance = true.
 
-# 2 MEANING OVER KEYWORDS (CRITICAL)
-Evaluate MEDICAL MEANING only. Never mark correct just because a keyword appeared.
-Example: "there's no scar" is NOT credit for a scar finding. "odynophagia is tibial tenderness" is WRONG even though the word odynophagia appears.
-Accept synonyms, plain English, abbreviations, alternate structure, equivalent clinical concepts, minor spelling/grammar errors.
-Reference/model answer is ONE example — not the only acceptable wording.
-Only mark incorrect when medical meaning is incorrect.
+# 2. INCORRECT, IRRELEVANT, OR NONSENSICAL REPLIES:
+- If the student provides an incorrect answer, a medical misconception, or an irrelevant/nonsense reply (e.g. replying "watch TV" to a question about risks of physical exertion):
+  * State politely and clearly why that statement is incorrect or unrelated to this clinical question.
+  * Point out the contradiction or missing physiological principle (e.g., "Watching TV is a resting activity; the question asks about the risks and complications during physical exertion when cardiac output cannot meet demand. Think about exertional symptoms or risks.").
+  * Provide a guiding clue or thought-provoking prompt, and invite them to try again (advance = false).
 
-# 3 REASONING
-Reward correct clinical reasoning even if wording differs from the model answer.
+# 3. GIVING UP / "I DON'T KNOW":
+- If the student explicitly states they do not know ("I don't know", "idk", "give up", "مش عارف", "معرفش"):
+  * Set advance = true.
+  * Provide the complete, clear expected model answer and educational explanation.
 
-# 4–5 MULTIPLE / EXTRA
-Accept any medically correct alternative. Extra correct detail must never reduce the score.
+# 4. TONE & LANGUAGE:
+- Supportive, academic, realistic medical examiner tone.
+- 2-3 concise, educational sentences per response.
+- If the question or student's input is in Arabic, or the session language is Arabic: respond in professional Arabic medical examiner style. If in English, respond in clear English.
 
-# 6 ORDER
-Order does not matter unless the question asks for sequence/priority.
-
-# 7 FULL ANSWER
-If medically complete: advance=true, brief confirmation, no unnecessary extra wording.
-
-# 8 PARTIAL ANSWER
-Acknowledge only what the student already said correctly. Encourage continuation. advance=false.
-Do NOT reveal missing answer items. Ask a focused guiding question or invite them to add the remaining points.
-
-# 9 INCORRECT ANSWER / MISCONCEPTION (CRITICAL)
-- If the student gives an incorrect answer, a wrong clinical concept, or a misconception (and did NOT say "I don't know" / give up):
-  - MUST set advance=false.
-  - State politely that the answer is not quite right or incorrect.
-  - Briefly point out the misconception WITHOUT giving away the correct answer or explaining what the correct answer is!
-  - Provide a guiding coaching hint or ask a guiding question to give the student a chance to think and try again.
-  - Example: If question is "What is the purpose of penicillin prophylaxis after rheumatic fever?" and student says "due to low immunity", respond: "Not quite — penicillin prophylaxis is not given for general low immunity. Think about what specific complication or recurrence we are trying to prevent in a patient who already had rheumatic fever. Would you like to try again?"
-  - NEVER dump the full solution/answer when an answer is wrong. Give the student the opportunity to answer.
-
-# 10 MINOR VS MAJOR
-Supportive tone for minor omissions. Clearly identify major medical misconceptions without revealing the solution.
-
-# 11–12 OPEN / NO GUESSING
-Credit every correct point mentioned. Never assume unstated meaning (e.g. "Calcium" ≠ Hypercalcemia).
-
-# 13–15 LANGUAGE / FAIRNESS
-Ignore minor language errors unless they change meaning. Be fair — not overly strict or generous.
-
-# 16–17 STYLE / BEHAVIOR
-Professional, supportive, coaching tone. English only in feedback. 2-3 short sentences.
-
-# 18 GOLD STANDARD
-Compare against the underlying medical concept — not reference wording.
-
-CRITICAL — NEVER LEAK THE KEY OR DUMP THE ANSWER:
-- NEVER state, list, or paraphrase the correct answer when the student's answer is incorrect or partial.
-- If incorrect, coach the student with a hint and prompt them to try again (advance=false).
-- ONLY reveal the expected answer if the student explicitly says "I don't know", "idk", "give up", "مش عارف", etc.
-
-Return ONLY valid JSON: {"advance":true|false,"feedback":"..."}`;
+# 5. OUTPUT FORMAT (MANDATORY):
+Return ONLY valid JSON in this exact structure:
+{"advance": true|false, "feedback": "Your dynamic personalized examiner feedback here"}`;
 
 /** @deprecated use OSCE_EXAMINER_RULES */
 const OSCE_EXAMINER_BOX_RULES = OSCE_EXAMINER_RULES;
@@ -6158,6 +6127,7 @@ async function evaluateOsceMeaningTurn(options: {
   sampleAnswer: string;
   questionNumber?: number;
   stationLabel?: string;
+  language?: string;
   usageMeta?: Omit<AiUsageMeta, 'feature'>;
 }): Promise<VivaAnswerEvaluation> {
   const {
@@ -6168,33 +6138,37 @@ async function evaluateOsceMeaningTurn(options: {
     sampleAnswer,
     questionNumber,
     stationLabel,
+    language,
     usageMeta,
   } = options;
   const settings = await getAISettings();
   const provider = process.env.AI_PROVIDER || settings.provider;
   const combined = combinedAnswer.trim();
   const current = studentAnswer.trim();
+  const isArabicContext =
+    /[\u0600-\u06ff]/.test(question) ||
+    /[\u0600-\u06ff]/.test(current) ||
+    String(language || '').toUpperCase() === 'AR';
   const local = mockEvaluateHistoryVivaAnswer(question, current, sampleAnswer, combined);
 
   const intent = detectVivaStudentIntent(current);
   if (intent === 'give_up' || studentGaveUpAnswer(current)) {
     let model = sampleAnswer.trim();
-    const isAr = /[\u0600-\u06ff]/.test(question) || /[\u0600-\u06ff]/.test(current);
     if (!model) {
       try {
-        model = await generateVivaModelAnswer(caseData, question, isAr ? 'AR' : 'EN');
+        model = await generateVivaModelAnswer(caseData, question, isArabicContext ? 'AR' : 'EN');
       } catch {
         model = '';
       }
     }
     if (!model) {
-      model = isAr
+      model = isArabicContext
         ? `في سياق حالة (${caseData.titleAr || caseData.titleEn})، الإجابة تعتمد على تقييم علامات ومضاعفات ${caseData.finalDiagnosis} وخطة الإدارة.`
         : `For this case (${caseData.titleEn}), the expected answer relates to evaluating ${caseData.finalDiagnosis}.`;
     }
     return {
       advance: true,
-      feedback: isAr
+      feedback: isArabicContext
         ? `مفيش مشكلة — الإجابة الصحيحة:\n${model}`
         : `No problem — here is the expected answer:\n${model}`,
     };
@@ -6202,21 +6176,34 @@ async function evaluateOsceMeaningTurn(options: {
   if (intent === 'hint') {
     return {
       advance: false,
-      feedback:
-        'Hint: focus on the underlying clinical concept — synonyms and plain English are fine. I will not mark this message as an answer attempt.',
+      feedback: isArabicContext
+        ? 'تلميح: ركّز على المفهوم الإكلينيكي الأساسي للمطلوب في السؤال. هسيبك تفكّر وتجاوب.'
+        : 'Hint: focus on the underlying clinical concept — explain in your own words. I will not count this hint request as an answer attempt.',
     };
   }
   if (intent === 'repeat') {
-    return { advance: false, feedback: `Of course. Here is the question again:\n${question}` };
+    return {
+      advance: false,
+      feedback: isArabicContext
+        ? `بالتأكيد. إليك السؤال مرة أخرى:\n${question}`
+        : `Of course. Here is the question again:\n${question}`,
+    };
   }
   if (intent === 'clarify') {
     return {
       advance: false,
-      feedback: `Happy to clarify — explain the clinical concept in your own words (synonyms are fine):\n${question}`,
+      feedback: isArabicContext
+        ? `بكل سرور — اشرح المفهوم الإكلينيكي بأسلوبك وبكلماتك:\n${question}`
+        : `Happy to clarify — explain the clinical concept in your own words (synonyms are fine):\n${question}`,
     };
   }
   if (intent === 'off_topic') {
-    return { advance: false, feedback: `Let's stay with this viva question:\n${question}` };
+    return {
+      advance: false,
+      feedback: isArabicContext
+        ? `خلّينا نركّز في سؤال الـ viva الحالي:\n${question}`
+        : `Let's stay focused on this viva question:\n${question}`,
+    };
   }
 
   // Hard local safety: wrong labeled definition / negated positive finding.
@@ -6242,13 +6229,13 @@ async function evaluateOsceMeaningTurn(options: {
     : { coverage: 0, matched: [] as string[], missing: [] as string[] };
 
   const coverageHint = sampleAnswer.trim()
-    ? `\nINTERNAL COVERAGE HINT (do not mention these labels to the student unless they already said them):\n- Likely covered so far: ${
-        localCoverage.matched.map(shortPointLabel).filter(Boolean).join('; ') || '(none detected locally)'
-      }\n- Still outstanding (DO NOT NAME): ${localCoverage.missing.length} point(s)\n`
+    ? `\nINTERNAL COVERAGE REFERENCE (do not dump raw checklist unless student gave up):\n- Addressed so far: ${
+        localCoverage.matched.map(shortPointLabel).filter(Boolean).join('; ') || '(none yet)'
+      }\n- Outstanding concepts count: ${localCoverage.missing.length}\n`
     : '';
 
   const modelAnswerBlock = sampleAnswer.trim()
-    ? `\nREFERENCE ANSWER (internal marking key only — evaluate MEANING; NEVER quote/list unanswered items unless student gave up):\n${sampleAnswer.trim()}`
+    ? `\nEXPECTED CLINICAL BENCHMARK (assess meaning and medical understanding — do not require verbatim wording):\n${sampleAnswer.trim()}`
     : '';
 
   const priorAttempts =
@@ -6260,7 +6247,7 @@ async function evaluateOsceMeaningTurn(options: {
       : [];
   const attemptBlock =
     priorAttempts.length > 0
-      ? `\nPrevious attempts for this SAME question (score meaning cumulatively):\n${priorAttempts
+      ? `\nPREVIOUS STUDENT ATTEMPTS FOR THIS SAME QUESTION (score cumulative progress):\n${priorAttempts
           .map((attempt, index) => `${index + 1}. ${attempt}`)
           .join('\n')}\n`
       : '';
@@ -6268,11 +6255,14 @@ async function evaluateOsceMeaningTurn(options: {
   const stationLine = stationLabel ? `\nSTATION / CONTEXT: ${stationLabel}` : '';
   const qNumLine =
     typeof questionNumber === 'number' ? `\nVIVA QUESTION NUMBER: ${questionNumber}` : '';
+  const langInstruction = isArabicContext
+    ? '\nLANGUAGE REQUIREMENT: Respond in natural professional Arabic (Egyptian medical viva coaching style).'
+    : '\nLANGUAGE REQUIREMENT: Respond in clear, professional English.';
 
   const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: `${OSCE_EXAMINER_RULES}
+      content: `${OSCE_EXAMINER_RULES}${langInstruction}
 
 CASE: ${caseData.titleEn}
 DIAGNOSIS (reference only — do not reveal to student): ${caseData.finalDiagnosis}${stationLine}${qNumLine}
@@ -6280,40 +6270,27 @@ ${modelAnswerBlock}${coverageHint}${knowledgeContext}`,
     },
     {
       role: 'user',
-      content: `Viva / examination prompt: ${question}${attemptBlock}\nLatest student attempt: ${current}\n\nCombined answer so far:\n${combined || '(none)'}`,
+      content: `Viva / examination prompt: ${question}${attemptBlock}\nLatest student message/attempt: "${current}"\n\nCombined answer across all messages so far:\n"${combined || current || '(none)'}"\n\nAnalyze this student reply dynamically and logically. If partial or multi-message, acknowledge what is correct and guide towards what is missing (advance=false). If complete or sufficient, confirm warmly (advance=true). If incorrect/nonsense, address the specific misconception contextually (advance=false). Return JSON {"advance": boolean, "feedback": string}.`,
     },
   ];
 
   const raw = await callOpenAISafe(
     messages,
     settings.examinerModel,
-    0.2,
-    360,
+    0.3,
+    450,
     () => JSON.stringify(local),
     { feature: 'examiner_viva', userId: usageMeta?.userId, sessionId: usageMeta?.sessionId },
   );
 
   const parsed = parseVivaAnswerEvaluation(raw, () => local);
 
-  // Hard safety: wrong definition / negation must never advance.
+  // Hard safety: wrong definition must never advance.
   if (sampleAnswer.trim()) {
     const wrongDefinitionFeedback = findWrongLabeledDefinitionFeedback(current, sampleAnswer);
     if (wrongDefinitionFeedback) {
       return { advance: false, feedback: unwrapExaminerPlainText(wrongDefinitionFeedback) };
     }
-  }
-
-  // Hard safety: drop leaked remaining keys.
-  if (
-    sampleAnswer.trim() &&
-    feedbackLeaksMissingPoints(parsed.feedback, combined, sampleAnswer)
-  ) {
-    return {
-      advance: false,
-      feedback: unwrapExaminerPlainText(
-        'Not complete yet — try focusing on the specific clinical distinction and try again.',
-      ),
-    };
   }
 
   return {
@@ -6330,6 +6307,8 @@ export async function evaluateHistoryVivaAnswer(
   studentAnswer: string,
   sampleAnswer = '',
   combinedStudentAnswer?: string,
+  language?: string,
+  usageMeta?: Omit<AiUsageMeta, 'feature'>,
 ): Promise<VivaAnswerEvaluation> {
   const combined = (combinedStudentAnswer ?? studentAnswer).trim();
   return evaluateOsceMeaningTurn({
@@ -6340,6 +6319,8 @@ export async function evaluateHistoryVivaAnswer(
     sampleAnswer,
     questionNumber,
     stationLabel: 'Examiner Box (History Viva)',
+    language,
+    usageMeta,
   });
 }
 
