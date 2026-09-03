@@ -1,19 +1,22 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaLibSql } from '@prisma/adapter-libsql';
-
-const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db';
-const isTurso = databaseUrl.startsWith('libsql://') || databaseUrl.startsWith('https://');
+import { createClient } from '@libsql/client';
 
 function createPrismaClient(): PrismaClient {
+  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db';
+  const isTurso = databaseUrl.startsWith('libsql://') || databaseUrl.startsWith('https://');
+
   if (isTurso) {
-    const adapter = new PrismaLibSql({
+    const libsql = createClient({
       url: databaseUrl,
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
-    return new PrismaClient({ adapter });
+    const adapter = new PrismaLibSql(libsql as any);
+    return new PrismaClient({ adapter } as any);
   }
   return new PrismaClient();
 }
 
 export const prisma = createPrismaClient();
+
 
