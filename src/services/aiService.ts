@@ -819,7 +819,7 @@ JSON structure:
 }
 
 async function getAISettings() {
-  const defaultModel = process.env.OPENAI_MODEL || 'openai/gpt-4o';
+  const defaultModel = process.env.OPENAI_MODEL || 'qwen/qwen-2.5-72b-instruct';
   let settings = await prisma.aISettings.findFirst();
   if (!settings) {
     settings = await prisma.aISettings.create({
@@ -852,8 +852,9 @@ async function getAISettings() {
     provider: process.env.AI_PROVIDER || settings.provider || 'openrouter',
     patientModel:
       process.env.OPENAI_PATIENT_MODEL ||
+      process.env.OPENAI_MODEL ||
       settings.patientModel ||
-      'openai/gpt-4o',
+      'qwen/qwen-2.5-72b-instruct',
     examinerModel:
       process.env.OPENAI_EXAMINER_MODEL ||
       process.env.OPENAI_MODEL ||
@@ -952,7 +953,7 @@ function chatPatientModel(settings: Awaited<ReturnType<typeof getAISettings>>): 
     process.env.OPENAI_PATIENT_MODEL ||
     process.env.OPENAI_MODEL ||
     settings.examinerModel ||
-    'openai/gpt-4o-mini'
+    'qwen/qwen-2.5-72b-instruct'
   );
 }
 
@@ -991,7 +992,7 @@ async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettin
       fallbackModel:
         process.env.OPENROUTER_FALLBACK_MODEL ||
         process.env.OPENAI_FALLBACK_MODEL ||
-        'openai/gpt-4o-mini',
+        'qwen/qwen-2.5-72b-instruct',
     };
   }
 
@@ -999,7 +1000,7 @@ async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettin
     return {
       client: new OpenAI({ apiKey: openAiKey }),
       provider: 'openai' as const,
-      fallbackModel: process.env.OPENAI_FALLBACK_MODEL || 'gpt-4o-mini',
+      fallbackModel: process.env.OPENAI_FALLBACK_MODEL || 'qwen/qwen-2.5-72b-instruct',
     };
   }
 
@@ -1014,7 +1015,7 @@ async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettin
         },
       }),
       provider: 'openrouter' as const,
-      fallbackModel: 'openai/gpt-4o-mini',
+      fallbackModel: 'qwen/qwen-2.5-72b-instruct',
     };
   }
 
