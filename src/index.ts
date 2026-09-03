@@ -77,7 +77,6 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
 };
 
 app.use(cors(corsOptions));
@@ -165,9 +164,19 @@ app.use(
   },
 );
 
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[process] Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[process] Uncaught Exception:", err);
+});
+
+const HOST = process.env.HOST || "0.0.0.0";
+
 app
-  .listen(PORT, async () => {
-    console.log(`Synoza server running on http://localhost:${PORT}`);
+  .listen(Number(PORT), HOST, async () => {
+    console.log(`Synoza server running on http://${HOST}:${PORT}`);
     if (isSmtpConfigured()) {
       const ok = await verifySmtpConnection();
       console.log(
