@@ -123,15 +123,11 @@ export function guardExaminerEvaluationScores(
   ai: EvaluationResult,
   baseline: EvaluationResult,
 ): EvaluationResult {
-  const guard = (aiScore: number, baselineScore: number): number => {
-    const safeAi = clampScore(aiScore, baselineScore);
-    const safeBaseline = clampScore(baselineScore, 0);
-
-    const lower = Math.max(0, safeBaseline - 30);
-    const upper = Math.min(100, safeBaseline + 30);
-    const boundedAi = Math.max(lower, Math.min(upper, safeAi));
-
-    return Math.round(boundedAi * 0.8 + safeBaseline * 0.2);
+  const guard = (aiScore: number, fallback: number): number => {
+    if (typeof aiScore === 'number' && !Number.isNaN(aiScore)) {
+      return Math.max(0, Math.min(100, Math.round(aiScore)));
+    }
+    return Math.max(0, Math.min(100, Math.round(fallback || 0)));
   };
 
   const communicationScore = guard(
@@ -774,12 +770,12 @@ function buildExaminerEvaluationPrompt(
 ): string {
   const langRule =
     lang === 'AR'
-      ? '7. Write ALL string fields (strengths, weaknesses, missedQuestions, clinicalErrors, recommendations, idealApproach, fullReport) ONLY in Arabic (Egyptian medical Arabic when appropriate).'
-      : '7. Write ALL string fields (strengths, weaknesses, missedQuestions, clinicalErrors, recommendations, idealApproach, fullReport) ONLY in English.';
+      ? '8. Write ALL string fields (strengths, weaknesses, missedQuestions, clinicalErrors, recommendations, idealApproach, fullReport) ONLY in Arabic (Egyptian medical Arabic when appropriate).'
+      : '8. Write ALL string fields (strengths, weaknesses, missedQuestions, clinicalErrors, recommendations, idealApproach, fullReport) ONLY in English.';
 
   const caseTitle = lang === 'AR' ? caseData.titleAr || caseData.titleEn : caseData.titleEn;
 
-  return `You are a senior OSCE clinical examiner. You will receive the COMPLETE transcript of a student's OSCE session (history, examination viva, diagnosis, and all examiner interactions).
+  return `You are a senior, rigorous, and objective OSCE clinical examiner. You will receive the COMPLETE transcript of a student's OSCE session (history taking, physical examination viva, diagnosis, and closing remarks).
 
 CASE CONTEXT:
 - Title: ${caseTitle}
@@ -789,16 +785,22 @@ CASE CONTEXT:
 - Scoring Rubric: ${caseData.evaluationRubric}
 - Physical Exam Findings (expected): ${caseData.physicalExam}
 
-INSTRUCTIONS:
-1. Read EVERY [STUDENT] message across ALL stages before scoring.
-2. Score based on what the student ACTUALLY did — not generic defaults.
-3. Compare their history questions, exam descriptions, and final diagnosis against the case data.
-4. Identify specific missed questions, clinical errors, and strengths from the transcript.
-5. Write the fullReport as a detailed markdown evaluation referencing specific student actions.
-6. Return ONLY valid JSON — no markdown fences, no extra text.
+STRICT OBJECTIVE GRADING RULES:
+1. PURE EVIDENCE-BASED SCORING: Award marks ONLY for demonstrable clinical actions in the transcript. Do NOT grant arbitrary baseline or participation marks.
+2. If a student skipped or provided no meaningful content for a section (e.g. said nothing in closing or examination, or only answered "I don't know" / passed), award ZERO (0) to 5 for that specific dimension.
+3. Dimension Rubric (0 to 100 for each):
+   - communicationScore (0-100): Professional introduction, patient rapport, empathy, active listening, and clarity. (0 if no communication; 10-30 if superficial/rushed; 75-100 if professional, empathetic, and comprehensive).
+   - historyTakingScore (0-100): Systematic exploration of chief complaint (SOCRATES/onset/character), red flags, past medical history, medications & compliance, family/social history. (0 if skipped or empty; 15-30 if only 1-2 generic questions; 75-100 if thorough and systematic).
+   - clinicalReasonScore (0-100): Correct interpretation of physical exam findings, accurate responses during examination viva, diagnostic reasoning. (0 if examination was skipped or student answered "idk" throughout).
+   - organizationScore (0-100): Logical clinical flow across OSCE stations (Intro -> History -> Exam -> Diagnosis -> Plan). (0-20 if disjointed or skipped stations; 80-100 if structured and coherent).
+   - closingScore (0-100): Accurate final diagnosis, clear explanation to patient/examiner, investigation plan, and management plan. (0 if no diagnosis or management was provided in closing).
+4. totalScore MUST equal: Math.round(communicationScore * 0.20 + historyTakingScore * 0.30 + clinicalReasonScore * 0.25 + organizationScore * 0.15 + closingScore * 0.10).
+5. Identify specific missed questions, clinical errors, and strengths directly from the transcript.
+6. Write fullReport as a detailed, constructive markdown report reflecting what the student actually did.
+7. Return ONLY valid JSON — no markdown fences, no extra text.
 ${langRule}
 
-JSON structure (all scores 0-100 integers):
+JSON structure:
 {
   "totalScore": number,
   "communicationScore": number,
@@ -806,13 +808,13 @@ JSON structure (all scores 0-100 integers):
   "clinicalReasonScore": number,
   "organizationScore": number,
   "closingScore": number,
-  "strengths": "string — specific strengths from transcript",
-  "weaknesses": "string — specific gaps observed",
-  "missedQuestions": "string — questions they should have asked but did not",
-  "clinicalErrors": "string — errors or unsafe reasoning",
+  "strengths": "string — specific strengths demonstrated by candidate",
+  "weaknesses": "string — specific gaps observed in candidate's performance",
+  "missedQuestions": "string — essential clinical questions candidate failed to ask",
+  "clinicalErrors": "string — clinical errors, incorrect answers, or unsafe reasoning",
   "recommendations": "string — actionable study recommendations",
-  "idealApproach": "string — how an excellent candidate would approach this case",
-  "fullReport": "string — comprehensive markdown report covering history, exam, diagnosis, and overall performance"
+  "idealApproach": "string — ideal systematic approach for this specific case",
+  "fullReport": "string — comprehensive markdown report covering performance in each stage"
 }${knowledgeContext ? `\n\nDomain knowledge for scoring:\n${knowledgeContext}` : ''}`;
 }
 
@@ -4108,54 +4110,56 @@ function mockExaminerEvaluation(
   const partialDiagnosis = !correctDiagnosis && hasPattern(diagnosisText, /\b(heart|cardiac|valve|murmur|valvular|قلب|صمام)/i);
   const gaveManagement = hasPattern(diagnosisText, /\b(manage|treat|refer|echo|echocardi|follow.?up|penicillin|surgery|intervention|إدارة|علاج|متابعة)/i);
 
-  let communicationScore =
-    20 +
-    Math.min(25, historyMsgCount * 6) +
-    Math.min(20, Math.floor(studentWordCount / 8)) +
-    Math.min(15, stagesCovered * 4);
-  if (askedIntroduction) communicationScore += 12;
+  let communicationScore = 0;
+  if (studentMessages.length > 0) {
+    if (askedIntroduction) communicationScore += 25;
+    communicationScore += Math.min(35, historyMsgCount * 6);
+    communicationScore += Math.min(25, Math.floor(studentWordCount / 10));
+    communicationScore += Math.min(15, stagesCovered * 5);
+  }
   communicationScore = Math.min(100, communicationScore);
 
-  let historyTakingScore =
-    15 +
-    Math.min(20, historyMsgCount * 5) +
-    checklistHits * 6;
-  if (askedComplaint) historyTakingScore += 12;
-  if (askedExertional) historyTakingScore += 8;
-  if (askedRheumatic) historyTakingScore += 12;
-  if (askedMeds) historyTakingScore += 8;
-  if (askedFamily) historyTakingScore += 6;
-  if (askedRedFlags) historyTakingScore += 10;
+  let historyTakingScore = 0;
+  if (historyMsgCount > 0) {
+    if (askedComplaint) historyTakingScore += 20;
+    if (askedExertional) historyTakingScore += 15;
+    if (askedRheumatic) historyTakingScore += 20;
+    if (askedMeds) historyTakingScore += 15;
+    if (askedFamily) historyTakingScore += 10;
+    if (askedRedFlags) historyTakingScore += 15;
+    historyTakingScore += Math.min(5, checklistHits * 2);
+  }
   historyTakingScore = Math.min(100, historyTakingScore);
 
-  let clinicalReasonScore =
-    10 +
-    creditedManeuverCount * 12 +
-    Math.min(20, demonstratedExamComponentCount * 8) +
-    Math.min(15, diagnosisMsgCount * 10);
-  if (describedExam) clinicalReasonScore += 15;
+  let clinicalReasonScore = 0;
+  clinicalReasonScore += creditedManeuverCount * 15;
+  clinicalReasonScore += Math.min(25, demonstratedExamComponentCount * 10);
+  if (describedExam) clinicalReasonScore += 10;
   if (correctDiagnosis) clinicalReasonScore += 35;
-  else if (partialDiagnosis) clinicalReasonScore += 16;
-  if (gaveManagement) clinicalReasonScore += 12;
+  else if (partialDiagnosis) clinicalReasonScore += 15;
+  if (gaveManagement) clinicalReasonScore += 15;
   clinicalReasonScore = Math.min(100, clinicalReasonScore);
 
-  const organizationScore = Math.min(
-    100,
-    18 +
-      stagesCovered * 10 +
-      Math.min(20, historyMsgCount * 4) +
-      (askedIntroduction ? 12 : 0) +
-      (askedComplaint ? 10 : 0) +
-      creditedManeuverCount * 6
-  );
-  const closingScore = Math.min(
-    100,
-    12 +
-      Math.min(25, diagnosisMsgCount * 12) +
-      Math.min(15, Math.floor(diagnosisText.length / 40)) +
-      (correctDiagnosis ? 40 : partialDiagnosis ? 18 : 0) +
-      (gaveManagement ? 18 : 0)
-  );
+  let organizationScore = 0;
+  if (stagesCovered > 0) {
+    organizationScore += Math.min(40, stagesCovered * 10);
+    if (askedIntroduction) organizationScore += 15;
+    if (askedComplaint) organizationScore += 15;
+    if (creditedManeuverCount > 0) organizationScore += 15;
+    if (diagnosisMsgCount > 0 && (correctDiagnosis || partialDiagnosis || gaveManagement)) {
+      organizationScore += 15;
+    }
+  }
+  organizationScore = Math.min(100, organizationScore);
+
+  let closingScore = 0;
+  if (diagnosisMsgCount > 0 && diagnosisText.trim().length > 0 && !studentGaveUpAnswer(diagnosisText)) {
+    if (correctDiagnosis) closingScore += 50;
+    else if (partialDiagnosis) closingScore += 25;
+    if (gaveManagement) closingScore += 35;
+    closingScore += Math.min(15, Math.floor(diagnosisText.length / 30));
+  }
+  closingScore = Math.min(100, closingScore);
 
   const totalScore = Math.round(
     communicationScore * 0.2 +
