@@ -819,7 +819,7 @@ JSON structure:
 }
 
 async function getAISettings() {
-  const defaultModel = process.env.OPENAI_MODEL || 'qwen/qwen-2.5-72b-instruct';
+  const defaultModel = process.env.OPENAI_MODEL || 'qwen/qwen3.7-flash';
   let settings = await prisma.aISettings.findFirst();
   if (!settings) {
     settings = await prisma.aISettings.create({
@@ -854,7 +854,7 @@ async function getAISettings() {
       process.env.OPENAI_PATIENT_MODEL ||
       process.env.OPENAI_MODEL ||
       settings.patientModel ||
-      'qwen/qwen-2.5-72b-instruct',
+      'qwen/qwen3.7-flash',
     examinerModel:
       process.env.OPENAI_EXAMINER_MODEL ||
       process.env.OPENAI_MODEL ||
@@ -953,7 +953,7 @@ function chatPatientModel(settings: Awaited<ReturnType<typeof getAISettings>>): 
     process.env.OPENAI_PATIENT_MODEL ||
     process.env.OPENAI_MODEL ||
     settings.examinerModel ||
-    'qwen/qwen-2.5-72b-instruct'
+    'qwen/qwen3.7-flash'
   );
 }
 
@@ -992,7 +992,7 @@ async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettin
       fallbackModel:
         process.env.OPENROUTER_FALLBACK_MODEL ||
         process.env.OPENAI_FALLBACK_MODEL ||
-        'qwen/qwen-2.5-72b-instruct',
+        'qwen/qwen3.7-flash',
     };
   }
 
@@ -1000,7 +1000,7 @@ async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettin
     return {
       client: new OpenAI({ apiKey: openAiKey }),
       provider: 'openai' as const,
-      fallbackModel: process.env.OPENAI_FALLBACK_MODEL || 'qwen/qwen-2.5-72b-instruct',
+      fallbackModel: process.env.OPENAI_FALLBACK_MODEL || 'qwen/qwen3.7-flash',
     };
   }
 
@@ -1015,7 +1015,7 @@ async function createChatClient(settings?: Awaited<ReturnType<typeof getAISettin
         },
       }),
       provider: 'openrouter' as const,
-      fallbackModel: 'qwen/qwen-2.5-72b-instruct',
+      fallbackModel: 'qwen/qwen3.7-flash',
     };
   }
 
