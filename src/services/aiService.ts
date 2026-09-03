@@ -658,18 +658,13 @@ Rules: if the doctor asks several short factual questions together (name, age, w
   const langNote =
     language === 'AR'
       ? voiceTurn
-        ? `VOICE CALL — مريض مصري في مكالمة صوتية. افهم المعنى مش الكلمات الحرفية. عامية مصرية طبيعية، جملة أو اتنين. ممنوع الفصحى والإنجليزي.`
-        : `اكتب بعامية مصرية طبيعية زي مريض حقيقي قاعد قدام الدكتور في العيادة — مش روبوت ولا فصحى.
-أمثلة على الأسلوب المطلوب (المحتوى لازم ييجي من بيانات الحالة فقط):
-- "صباح النور يا دكتور. والله يا دكتور أنا تعبان أوي، [اذكر الشكوى من بيانات الحالة]."
-- "الله يسلمك يا دكتور، تسلم. [ثم اذكر تأثير المرض على حياتك من بيانات الحالة]."
-- "اسمي ${nameAr}."
-استخدم كلمات طبيعية: والله، أوي، يا دكتور، مش، عشان، كده.
-٢–٤ جمل لما تحكي عن أعراضك أو مشاعرك؛ جملة أو اتنين للأسئلة الواقعية (الاسم، السن، السكن).`
+        ? `VOICE CALL — أنت مريض مصري حقيقي في مكالمة صوتية. افهم عمق كلام وسؤال الدكتور ورد بعامية مصرية أصيلة وبسيطة بدون أي فصحى أو إنجليزي.`
+        : `اكتب بعامية مصرية طبيعية وسلسة تماماً زي مريض حقيقي قاعد قدام الدكتور في العيادة.
+استخدم لغة عفوية ومعبرة (والله يا دكتور، بقالي حوالي، بحس بوجع، لما بطلع السلم، الحمد لله، مش باخد أدوية).`
       : language === 'EN'
         ? voiceTurn
-          ? 'Respond ONLY in English. One or two short sentences.'
-          : 'Respond ONLY in English. Sound like a real patient (2–4 sentences when describing symptoms).'
+          ? 'Respond ONLY in English. Speak naturally like a real patient in a voice call.'
+          : 'Respond ONLY in English. Sound like a real authentic human patient.'
         : 'Match the doctor language: Egyptian Arabic or English, natural spoken style.';
 
   const phaseNote =
@@ -964,7 +959,7 @@ function extractCompletionText(response: ChatCompletion): string {
 }
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const DEFAULT_OPENROUTER_KEY = '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';
+const DEFAULT_OPENROUTER_KEY = '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';
 
 function isOpenRouterProvider(provider: string): boolean {
   return /^open.?router$/i.test(provider.trim());
@@ -6791,6 +6786,11 @@ export const GAVE_UP_ANSWER_PATTERNS = [
   /\bnot\s*sure\b/i,
   /\bno\s*idea\b/i,
   /\bno\s*clue\b/i,
+  /\bcan'?t\s+remember\b/i,
+  /\bunsure\b/i,
+  /\bpass\b/i,
+  /\bskip\b/i,
+
   /\bcan'?t\s+remember\b/i,
   /\bunsure\b/i,
   /\bpass\b/i,
