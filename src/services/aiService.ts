@@ -193,22 +193,15 @@ You must NEVER behave like an AI assistant, medical tutor, examiner, or chatbot.
 
 ---
 
-## 1. PRIMARY OBJECTIVE
+## 1. PRIMARY OBJECTIVE & QUESTION COMPREHENSION
 
 Simulate the patient as realistically and medically accurately as possible.
 
-The student should feel that they are conducting a real clinical consultation.
-
-Your responses must:
-
-* Be directly related to the patient's case.
-* Be medically consistent with the defined diagnosis and clinical scenario.
-* Answer the physician's questions directly.
-* Answer **ALL questions contained in a single student message**.
-* Maintain consistency throughout the entire session.
-* Use realistic patient language.
-* Reflect the patient's symptoms, history, concerns, and emotional state.
-* Never produce logically impossible information for the case.
+* **Comprehend & Analyze First**: Carefully analyze what the physician is asking. The physician may speak in Egyptian colloquial Arabic (عامية مصرية), Modern Standard Arabic, or English. They may ask direct questions, indirect questions, comparisons, or multi-part questions.
+* **Understand Context & Intent**: If the doctor asks "انت مولود في شبرا الخيمة ولا مولود في حتة تانية" or "انت أصلاً من شبرا ولا منين", understand that they are asking about your birthplace and origin. Answer naturally in character (e.g. "أيوه يا دكتور أنا مولود وعايش في شبرا الخيمة طول عمري").
+* **Answer ALL Questions in One Turn**: If the student message contains multiple questions (e.g. name + age + residence + job + smoking + symptoms), answer EVERY SINGLE ONE clearly in a cohesive response.
+* **Realistic Patient Tone**: Use genuine, natural spoken Egyptian Arabic (عامية مصرية بسيطة وعفوية).
+* **Never Say "مش فاهم"**: Real patients understand doctor questions in their native language. Never reply with "مش فاهم" or "مش فاهم، ممكن توضّح سؤالك؟" for legitimate conversational or medical questions.
 
 ---
 
@@ -221,82 +214,29 @@ Before responding, internally consider:
 * Patient demographics
 * Chief complaint
 * History of presenting illness
-* Symptoms
-* Symptom onset
-* Duration
-* Severity
-* Location
-* Radiation
-* Character
-* Aggravating factors
-* Relieving factors
+* Symptoms (onset, duration, severity, location, radiation, character)
+* Aggravating and relieving factors
 * Associated symptoms
-* Past medical history
-* Surgical history
-* Drug history
-* Allergies
-* Family history
-* Social history
-* Relevant examination findings
-* Investigations
-* Diagnosis
-* Disease stage/severity
-* Any other information explicitly provided in the case
+* Past medical, surgical, drug, allergy, family, and social history
 
 Never contradict established case information.
 
 ---
 
-## 3. DIRECT ANSWERS — MANDATORY
+## 3. REALISTIC IN-CHARACTER ASSUMPTIONS
 
-If the physician asks multiple questions in one message, answer **every question**.
-
-Do NOT answer only the first question.
-
-Example:
-
-Physician:
-
-"How long have you had the pain? Where exactly is it? Does it radiate anywhere? Do you have fever or vomiting?"
-
-Correct patient response:
-
-"It started about three days ago. It's mainly on the right side of my abdomen and sometimes goes toward my shoulder. I've had a fever, and I've vomited twice."
-
-Incorrect:
-
-"I've had abdominal pain for three days."
-
-The second response is incomplete.
+For non-clinical personal/social details not explicitly specified in the case (e.g. birthplace when residence is known, general daily life, hobbies, marital status):
+* Make safe, realistic, plausible everyday assumptions consistent with the patient's age, gender, and social background.
+* If residence is stated (e.g. Shubra, Cairo) and birthplace is not separately specified, assume you were born and raised in that same place.
+* Never say "I don't remember", "I don't know", or "مش فاكر" for basic personal questions.
 
 ---
 
-## 4. NEVER USE UNNECESSARY DEFERRALS
+## 4. DIRECT ANSWERS & NO DIAGNOSIS LEAKS
 
-Do NOT automatically respond with:
-
-* "I don't know."
-* "I don't remember."
-* "I'm not sure."
-* "I don't have that information."
-* "I cannot answer that."
-* "The case does not specify this."
-
-These responses should NOT be used merely because the information is not explicitly written in one field.
-
-Use the complete clinical context to produce the most medically plausible patient response.
-
-Only express uncertainty when uncertainty is clinically realistic for that patient.
-
-For example:
-
-"I don't remember the exact name of the medication, but it's a small white tablet I take every morning."
-
-This is acceptable when the medication name is genuinely unavailable.
-
----
-
-## 5. NEVER INVENT CONTRADICTORY INFORMATION
+* Answer the physician's questions directly.
+* Never state or reveal the final diagnosis (e.g. never say "عندي ضيق في الصمام الأورطي" or the medical diagnostic label). Describe what you actually feel as a human patient (e.g. "بحس بضيق نفس ونهجان لما بمشي أو بطلع السلم").
+* Lay language only — no medical jargon.
 
 You may make a reasonable natural-language response based on the case, but you must never introduce information that conflicts with the diagnosis or established history.
 
@@ -676,9 +616,9 @@ Rules: if the doctor asks several short factual questions together (name, age, w
     : `CHAT RULES:
 - Sound human — vary tone with personality: ${personality}
 - When the doctor shows empathy (سلامة، ربنا يشفيك) → thank them warmly; you may add one sentence about how illness affects your life.
-- The doctor speaks natural Egyptian colloquial Arabic (عامية): understand "هيلو/أهلاً" as greeting, "عامل إيه/إزيك/ايه الأخبار" as asking how you feel, "اسمك ايه" as name, etc.
+- The doctor speaks natural Egyptian colloquial Arabic (عامية): understand "هيلو/أهلاً" as greeting, "عامل إيه/إزيك/ايه الأخبار" as asking how you feel, "اسمك ايه" as name, "مولود فين" / "مولود في شبرا ولا حتة تانية" as birthplace/origin, etc.
 - ⚠️ MOST IMPORTANT RULE: If the doctor asks MULTIPLE questions in one message (e.g. "اسمك إيه وعندك كام سنة ومولود فين وشغال إيه ومتجوز وبتدخن"), you MUST answer EVERY SINGLE question in ONE reply. Do NOT answer only the first one or two. Count every question mark and every "و" conjunction — each one needs an answer. Example: if asked name + age + residence + job + marital + smoking + alcohol → answer ALL SEVEN in one natural paragraph.
-- Only if the question is truly unclear (single word like "أيه" alone) → "مش فاهم قصدك يا دكتور، ممكن توضّح سؤالك؟"
+- QUESTION COMPREHENSION: Always interpret what the doctor means and answer naturally in character as an Egyptian patient. Never say "مش فاهم" or refuse to answer. If asked about background details not in the case, make safe, realistic assumptions in character.
 - Never ask the doctor questions back. Never state the diagnosis (${caseData.finalDiagnosis}).`;
 
   const personaOverride = knowledgeContext.includes('ADMIN AI KNOWLEDGE')
@@ -708,7 +648,7 @@ ${structuredContext}
 ${phaseNote}
 
 ${voiceRules}
-- CRITICAL: For clinical history (symptoms, medications, past illnesses), stay strictly grounded in CASE BACKGROUND. For personal background (residence, job, marital status, smoking) not configured, make a realistic, safe assumption (e.g., non-smoker, living in Cairo) and answer directly. Never say "I don't remember" or defer personal questions.
+- CRITICAL: For clinical history (symptoms, medications, past illnesses), stay strictly grounded in CASE BACKGROUND. For personal background (residence, birthplace, job, marital status, smoking) not configured, make a realistic, safe assumption (e.g., born and raised in your city of residence, non-smoker, living in Cairo) and answer directly. Never say "I don't remember" or defer personal questions.
 - When speaking Arabic, never leak English admin field text — paraphrase into natural Egyptian Arabic.
 - Avoid repeating the same complaint sentence if you already said it; add a new detail from CASE BACKGROUND or how it affects daily life.
 - Lay language only — no medical jargon or English disease terms.
@@ -819,7 +759,7 @@ JSON structure:
 }
 
 async function getAISettings() {
-  const defaultModel = process.env.OPENAI_MODEL || 'qwen/qwen3.7-flash';
+  const defaultModel = process.env.OPENAI_MODEL || 'google/gemini-2.0-flash-001';
   let settings = await prisma.aISettings.findFirst();
   if (!settings) {
     settings = await prisma.aISettings.create({
@@ -854,7 +794,7 @@ async function getAISettings() {
       process.env.OPENAI_PATIENT_MODEL ||
       process.env.OPENAI_MODEL ||
       settings.patientModel ||
-      'qwen/qwen3.7-flash',
+      'google/gemini-2.0-flash-001',
     examinerModel:
       process.env.OPENAI_EXAMINER_MODEL ||
       process.env.OPENAI_MODEL ||
@@ -948,7 +888,7 @@ function isReasoningModel(model: string): boolean {
 /** Realtime models are not valid for text chat completions — avoid a slow failed-then-fallback round trip. */
 function chatPatientModel(settings: Awaited<ReturnType<typeof getAISettings>>): string {
   const configured = settings.patientModel;
-  if (!/realtime/i.test(configured)) return configured;
+  if (configured && !/realtime|gpt-realtime/i.test(configured)) return configured;
   return (
     process.env.OPENAI_PATIENT_MODEL ||
     process.env.OPENAI_MODEL ||
@@ -1062,12 +1002,15 @@ async function callOpenAI(
     });
   };
 
-  const tryCandidateModels = [
+  const candidateList = [
     model,
     ...(model !== fallbackModel ? [fallbackModel] : []),
-    'minimax/minimax-m3:free',
-    'google/gemma-4-26b-a4b-it:free',
+    'google/gemini-2.0-flash-001',
+    'google/gemini-2.5-flash',
+    'openai/gpt-4o-mini',
+    'qwen/qwen-2.5-72b-instruct',
   ];
+  const tryCandidateModels = candidateList.filter((m, i, arr) => m && arr.indexOf(m) === i);
 
   let lastError: unknown = null;
   for (const candidate of tryCandidateModels) {
@@ -1305,7 +1248,7 @@ function finalizePatientReply(
     if (isGreetingOnly(userMessage) || isDoctorIntroduction(userMessage)) {
       return patientGreetingOnlyReply(caseData, true, userMessage);
     }
-    return 'مش فاهم، ممكن توضّح سؤالك؟';
+    return 'أيوه يا دكتور، معاك.';
   }
 
   text = enforcePatientLanguage(text, true);
@@ -1644,14 +1587,9 @@ function isNearDuplicatePatientReply(
   if (needle.length < 12) return false;
   const recent = history
     .filter((m) => m.role === 'PATIENT' || m.role === 'assistant')
-    .slice(-4)
+    .slice(-3)
     .map((m) => normalizeReplyForCompare(m.content));
-  return recent.some(
-    (prev) =>
-      prev === needle ||
-      (prev.length > 20 && needle.includes(prev)) ||
-      (needle.length > 20 && prev.includes(needle)),
-  );
+  return recent.some((prev) => prev === needle);
 }
 
 function isVagueStudentMessage(text: string): boolean {
@@ -1867,7 +1805,7 @@ function enforcePatientLanguage(text: string, isArabic: boolean): string {
   const latin = (scrubbed.match(/[a-zA-Z]/g) || []).length;
   const arabic = (scrubbed.match(/[\u0600-\u06FF]/g) || []).length;
   if (latin >= 3 && arabic === 0) {
-    return 'مش فاهم، ممكن توضّح سؤالك؟';
+    return 'أيوه يا دكتور، معاك.';
   }
   return scrubbed;
 }
@@ -2198,7 +2136,7 @@ function asksOnsetDuration(text: string): boolean {
 }
 
 function asksExertionalDyspnea(text: string): boolean {
-  return /(?:breath|dyspnea|نفس|تنفس).*(?:exert|effort|exercise|مجهود|حركة)|(?:exert|effort|exercise|مجهود|حركة).*(?:breath|dyspnea|نفس|تنفس)|بيزيد.*(?:المجهود|الحركة)|يزيد.*(?:المجهود|الحركة)/i.test(text);
+  return /(?:breath|dyspnea|نفس|تنفس|تعب|تعبان|تتعب).*(?:exert|effort|exercise|مجهود|حركة|تمشي|مشي|تطلع|سلم)|(?:exert|effort|exercise|مجهود|حركة|تمشي|مشي|تطلع|سلم).*(?:breath|dyspnea|نفس|تنفس|تعب|تعبان|تتعب)|بيزيد.*(?:المجهود|الحركة|المشي)|يزيد.*(?:المجهود|الحركة|المشي)|لما\s*تمشي|مع\s*المشي|مع\s*المجهود/i.test(text);
 }
 
 function asksOrthopneaPnd(text: string): boolean {
@@ -2646,10 +2584,23 @@ function semanticEgyptianPatientIntent(question: string): PatientQuestionIntent 
   // list merely because it contains the word دوا.
   if (asksAllergy(question)) return 'allergy';
 
-  if (has(/(?:^|\s)(?:مولود|اتولدت|مكان\s+(?:ال)?ميلاد(?:ك)?)(?:\s|$)/) && has(/(?:^|\s)فين(?:\s|$)/)) {
+  if (
+    has(/(?:^|\s)(?:مولود|اتولدت|اتولدتي|مكان\s+(?:ال)?ميلاد(?:ك)?)(?:\s|$)/) ||
+    has(/اصلك\s+منين/) ||
+    has(/منين\s+اصلا/) ||
+    has(/بلدك\s+ايه/) ||
+    has(/مولود\s+في/) ||
+    has(/اتولدت\s+في/)
+  ) {
     return 'birthPlace';
   }
-  if (has(/(?:^|\s)(?:عايش|ساكن|مقيم|بتسكن)(?:\s|$)/) && has(/(?:^|\s)فين(?:\s|$)/)) {
+  if (
+    has(/(?:^|\s)(?:عايش|ساكن|مقيم|بتسكن)(?:\s|$)/) ||
+    has(/بيتك\s+فين/) ||
+    has(/ساكن\s+في/) ||
+    has(/عايش\s+في/) ||
+    has(/منين/)
+  ) {
     return 'residence';
   }
   if (has(/(?:^|\s)(?:شغال|بتشتغل|وظيفتك|مهنتك)(?:\s|$)/) || has(/بتعمل\s+ايه\s+في\s+حياتك/)) {
@@ -2995,12 +2946,13 @@ function patientBirthPlacePhrase(
   caseData: Case,
   isArabic: boolean,
   naturalWrittenArabic = false,
+  userMessage = '',
 ): string {
   const explicitBirthPlace = caseData.patientBirthPlace?.trim();
 
   if (explicitBirthPlace) {
     return isArabic
-      ? `اتولدت في ${arabicCasePlaceName(explicitBirthPlace)}.`
+      ? `أنا اتولدت في ${arabicCasePlaceName(explicitBirthPlace)}.`
       : `I was born in ${explicitBirthPlace}.`;
   }
 
@@ -3008,13 +2960,21 @@ function patientBirthPlacePhrase(
 
   if (bornMatch) {
     return isArabic
-      ? `اتولدت في ${arabicCasePlaceName(bornMatch[1])}.`
+      ? `أنا اتولدت في ${arabicCasePlaceName(bornMatch[1])}.`
       : `I was born in ${bornMatch[1].trim()}.`;
   }
 
+  const residence = caseData.patientResidence?.trim();
+  if (residence) {
+    const arabicRes = arabicCasePlaceName(residence);
+    return isArabic
+      ? `أيوه يا دكتور، أنا مولود وعايش في ${arabicRes} طول عمري.`
+      : `Yes doctor, I was born and raised in ${residence}.`;
+  }
+
   return isArabic
-    ? patientUncertaintyPhrase(caseData, true, 'birthplace', naturalWrittenArabic)
-    : "I'm not exactly sure where I was born.";
+    ? 'أنا مولود وعايش في القاهرة يا دكتور.'
+    : 'I was born and raised in Cairo, doctor.';
 }
 
 function patientHobbiesPhrase(caseData: Case, isArabic: boolean, userMessage = ''): string {
@@ -3657,13 +3617,13 @@ function mockPatientResponse(
   }
 
   if (isVagueStudentMessage(userMessage)) {
-    return isArabic ? 'ممكن توضّح سؤالك أكتر يا دكتور؟' : 'Could you clarify your question, doctor?';
+    return isArabic ? 'أيوه يا دكتور، معاك.' : 'Yes doctor, please go ahead.';
   }
 
   // Sensible default answering safely in character instead of pretending not to understand
   return isArabic
-    ? 'تمام يا دكتور، غير كده مفيش أعراض تانية حاسس بيها.'
-    : 'Everything else feels normal, doctor.';
+    ? 'تمام يا دكتور، معاك، اتفضل اسألني.'
+    : 'Yes doctor, I am listening.';
 }
 
 export function buildRealtimePatientInstructions(caseData: Case, sessionLanguage: string): string {
@@ -3755,7 +3715,7 @@ export function sanitizeRealtimePatientTranscript(
   if (!trimmed) {
     const retry = getDeterministicPatientResponse(caseData, studentMessage, lang, [], true);
     if (retry) return retry;
-    return lang === 'AR' ? 'مش فاهم، ممكن توضّح سؤالك؟' : 'Could you clarify your question?';
+    return lang === 'AR' ? 'أيوه يا دكتور، معاك.' : 'Yes doctor, please go ahead.';
   }
   return trimmed;
 }
@@ -3872,7 +3832,7 @@ export async function getPatientResponse(
   const voiceModel =
     process.env.OPENAI_VOICE_MODEL ||
     process.env.OPENAI_PATIENT_MODEL ||
-    'gpt-4o-mini';
+    'google/gemini-2.0-flash-001';
   const activeModel = voiceTurn ? voiceModel : chatPatientModel(settings);
   const maxTokens = voiceTurn
     ? VOICE_PATIENT_MAX_TOKENS
@@ -3890,7 +3850,7 @@ export async function getPatientResponse(
     maxTokens,
     () =>
       voiceTurn
-        ? (lang === 'EN' ? 'Sorry, could you clarify?' : 'مش فاهم، ممكن توضّح سؤالك؟')
+        ? (lang === 'EN' ? 'Yes doctor, I am listening.' : 'أيوه يا دكتور، معاك.')
         : mockPatientResponse(caseData, normalizedMessage, lang, history),
     {
       feature: voiceTurn ? 'realtime' : 'patient_chat',
@@ -3917,7 +3877,7 @@ export async function getPatientResponse(
   );
   const trimmed = finalized.trim();
   if (!trimmed) {
-    return lang === 'AR' ? 'مش فاهم، ممكن توضّح سؤالك؟' : 'Could you clarify your question?';
+    return lang === 'AR' ? 'أيوه يا دكتور، معاك.' : 'Yes doctor, please go ahead.';
   }
   return trimmed;
 }
