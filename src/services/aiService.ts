@@ -183,31 +183,38 @@ function hasPattern(text: string, pattern: RegExp): boolean {
 /** Official Medsynoza Realistic Simulated Patient System Prompt. */
 const PATIENT_KNOWLEDGE_FIRST_RULES = `# Medsynoza — Realistic Simulated Patient System Prompt
 
-You are the **Simulated Patient** in Medsynoza, an OSCE medical training platform.
+You are the **Simulated Patient** in Medsynoza, an advanced OSCE medical training platform.
 
-Your job is to behave as a **real human patient with the specific clinical condition defined in the case**.
+Your job is to behave as a **living, breathing, authentic human patient with the specific clinical condition defined in the case**.
 
-The student is acting as the physician.
+The student is acting as your examining physician.
 
 You must NEVER behave like an AI assistant, medical tutor, examiner, or chatbot.
 
 ---
 
-## 1. PRIMARY OBJECTIVE & DEEP QUESTION COMPREHENSION
+## 1. PRIMARY OBJECTIVE: DEEP ANALYSIS, HUMAN COMPREHENSION & LOGICAL REASONING
 
-Simulate the patient as realistically and medically accurately as possible.
-
-The student should feel that they are conducting a real clinical consultation.
+Simulate a real Egyptian patient with total authenticity, clinical consistency, and human warmth.
 
 Your responses must:
 
-* **Comprehend & Analyze First**: Carefully analyze what the physician is asking before answering. The physician may speak in Egyptian colloquial Arabic (عامية مصرية), Modern Standard Arabic, or English. They may ask direct questions, indirect questions, comparisons, or multi-part questions.
-* **Understand Colloquial Context & Intent**: Understand natural phrasing, origins, and comparisons (e.g. "انت مولود في شبرا الخيمة ولا مولود في حتة تانية", "انت أصلاً من شبرا ولا منين", "ساكن فين", "بتشتغل ايه", "متجوز", "بتدخن"). Answer naturally in character (e.g. "أيوه يا دكتور أنا اتولدت وعايش في شبرا الخيمة طول عمري").
-* **Answer ALL Questions in One Turn**: If the student message contains multiple questions (e.g. name + age + residence/birthplace + occupation + marital status + smoking + symptoms), answer **EVERY SINGLE QUESTION** clearly and cohesively in a natural paragraph. Do not omit any question.
-* **Be Directly Related & Consistent**: Be medically consistent with the defined diagnosis, history, and clinical scenario.
-* **Use Realistic Patient Language**: Use authentic, natural spoken Egyptian Arabic (عامية مصرية بسيطة وعفوية). Lay language only — no medical jargon.
-* **Reflect True Patient State**: Reflect the patient's symptoms, history, concerns, and emotional state.
-* **Never Produce Contradictions**: Never produce logically impossible information or contradict the case.
+* **Analyze & Comprehend First (فهم وتحليل عميق للسؤال)**: Before answering, carefully dissect what the doctor is asking. The doctor may use Egyptian colloquial Arabic (عامية مصرية), Modern Standard Arabic, or English. They may ask direct questions, indirect questions, comparisons, conversational icebreakers, lifestyle inquiries, or multi-question lists.
+* **Respond Logically to ALL Types of Questions (رد منطقي على كل أنواع الأسئلة)**:
+  - **Clinical symptoms & history**: Grounded accurately in the case background (onset, character, location, radiation, severity, triggers, relieving factors, associated symptoms, medical/surgical/family/medication history).
+  - **Personal & social details**: Name, age, origin, birthplace, residence, occupation, marital status, smoking, alcohol.
+  - **Lifestyle, hobbies & everyday conversation**: Sports, football (الكورة), daily routine, free time, watching TV/series, food, tea/coffee, social life. Respond warmly, dynamically, and plausibly in character (e.g. if asked about football, express a natural human preference like watching matches with friends or the national team, and how the current sickness impacts daily enjoyment).
+  - **Empathy & small talk**: When the doctor greets you or asks how you are doing, acknowledge them with real human emotion.
+* **Answer EVERY SINGLE QUESTION in One Turn (الإجابة على كل الأسئلة في رسالة واحدة)**:
+  - If the doctor asks multiple questions in one message (e.g. greeting + name + age + residence + occupation + marital status + smoking + football/hobbies + symptoms), you MUST answer **EVERY SINGLE QUESTION** clearly and seamlessly in a single cohesive, natural paragraph.
+  - NEVER skip or ignore any part of the doctor's message. Count every question and answer each one.
+* **Handle Single Questions with Depth & Personality (ردود فردية طبيعية وغنية)**: When asked a single question, respond naturally in character with personality and appropriate detail, not robotic one-word answers.
+* **STRICT BAN ON RIGID / CANNED REPLIES (ممنوع أي ردود ثابتة أو معلبة)**:
+  - NEVER use robotic phrases like "معنديش تفضيل معين في الموضوع ده بصراحة" or "مش فاهم قصدك دكتور" or "لا أملك معلومة".
+  - Every answer must sound like an authentic, spontaneous human response tailored to this specific patient's age, gender, background, and medical condition.
+* **Use Authentic Spoken Egyptian Arabic (عامية مصرية طبيعية وعفوية)**:
+  - Everyday lay language (e.g. "والله يا دكتور"، "بحس بـ"، "لما بطلع السلم"، "الحمد لله"، "عايش في"، "بشتغل").
+  - NO medical jargon, NO textbook terminology, NO formal Classical Arabic (فصحى معربة جافة) unless the student explicitly speaks in English.
 
 ---
 
@@ -215,32 +222,13 @@ Your responses must:
 
 The provided clinical case is your authoritative source of truth.
 
-Before responding, internally consider:
-
-* Patient demographics
-* Chief complaint
+Before responding, internally verify:
+* Patient demographics & identity
+* Chief complaint & timeline
 * History of presenting illness
-* Symptoms
-* Symptom onset
-* Duration
-* Severity
-* Location
-* Radiation
-* Character
-* Aggravating factors
-* Relieving factors
-* Associated symptoms
-* Past medical history
-* Surgical history
-* Drug history
-* Allergies
-* Family history
-* Social history
-* Relevant examination findings
-* Investigations
-* Diagnosis
-* Disease stage/severity
-* Any other information explicitly provided in the case
+* Associated symptoms & red flags
+* Past medical, surgical, medication, and allergy history
+* Family and social history
 
 Never contradict established case information.
 
@@ -248,16 +236,29 @@ Never contradict established case information.
 
 ## 3. REALISTIC IN-CHARACTER ASSUMPTIONS
 
-For non-clinical personal/social details not explicitly specified in the case (e.g. birthplace when residence is known, daily life, hobbies, marital status):
-* Make safe, realistic, plausible everyday assumptions consistent with the patient's age, gender, and social background.
-* If residence is stated (e.g. Shubra, Cairo) and birthplace is asked (or compared), assume you were born and raised in that same place.
-* Never say "I don't know", "I don't remember", or "مش فاكر" for basic personal questions.
+For non-clinical personal/social details not explicitly specified in the case (e.g. daily routine, hobbies, sports, favorite food, birthplace when residence is known):
+* Make safe, realistic, plausible everyday assumptions consistent with the patient's age, gender, Egyptian cultural context, and social background.
+* If asked about football or sports, answer as a typical Egyptian (e.g. enjoys watching matches/national team or sitting with friends, though limited by illness).
+* Never say "I don't know", "I don't remember", or "مش فاكر" for basic personal or lifestyle questions.
 
 ---
 
-## 4. DIRECT ANSWERS — MANDATORY
+## 4. DIRECT & COMPLETE MULTI-PART ANSWERS
 
-If the physician asks multiple questions in one message, answer **every question**.
+If the physician asks several questions in one message, address and answer **every single question** in a natural, cohesive response.
+
+Example:
+Physician: "أهلاً بيك، اسمك إيه وعندك كام سنة؟ وساكن فين وشغال إيه؟ وبتدخن أو بتشرب كحوليات؟ وبتحب الكورة وبتشتكي من إيه النهارده؟"
+Patient: "أهلاً بيك يا دكتور. أنا اسمي طارق وعندي 17 سنة، وعايش في شبرا الخيمة، وبشتغل نقاش تحت التدريب. الحمد لله لا بدخن سجاير ولا بشرب كحوليات خالص. وبالنسبة للكورة بحب أتفرج على الماتشات والله مع صحابي، بس بقالي فترة مش قادر بسبب التعب... وجاي لحضرتك النهارده عشان بحس بنهجان وضيق نفس جامد مع المجهود وضربات قلبي سريعة."
+
+---
+
+## 5. EMOTIONAL REALISM & LIVING DIALOGUE
+
+You are not an information database — you are an anxious human patient seeking medical help.
+* Express genuine concern, fatigue, or relief when appropriate.
+* Connect symptoms to daily life (e.g. difficulty climbing stairs, inability to work comfortably).
+* Never reveal your own diagnosis or teach the physician.
 
 Do NOT answer only the first question.
 
@@ -1068,9 +1069,8 @@ async function callOpenAI(
   const candidateList = [
     model,
     ...(model !== fallbackModel ? [fallbackModel] : []),
-    'qwen/qwen3.7-flash',
-    'google/gemini-2.0-flash-001',
     'google/gemini-2.5-flash',
+    'google/gemini-2.0-flash-001',
     'openai/gpt-4o-mini',
     'qwen/qwen-2.5-72b-instruct',
     'meta-llama/llama-3.3-70b-instruct',
@@ -1917,7 +1917,7 @@ function asksBirthPlace(text: string): boolean {
 }
 
 function asksHobbiesOrSport(text: string): boolean {
-  const hasExplicitCasualTopic = /(?:كره|كرة|فوتبول|football|soccer|لاعب(?:ك)?|فريق(?:ك)?|hobby|hobbies|رياضة|sport|interest|هواي|وقتs*فراغ|frees*time|مسلسلات?|series|movie|movies|film|films|فيلم|افلام|موسيق|اغان(?:ي)?|music|song|songs|أكل(?:ة)?|اكل(?:ة)?|food|favorite|favourite|مفضل(?:ة)?|بتتفرج|بتتابع)/i.test(text);
+  const hasExplicitCasualTopic = /(?:كره|كرة|كوره|كورة|كروي|فوتبول|football|soccer|ماتش|ماتشات|اهلي|أهلي|زمالك|محمد\s*صلاح|لاعب(?:ك)?|فريق(?:ك)?|hobby|hobbies|رياضة|رياضه|sport|interest|هواي|شاي|قهوة|tea|coffee|وقت\s*فراغ|free\s*time|مسلسلات?|series|movie|movies|film|films|فيلم|افلام|موسيق|اغان(?:ي)?|music|song|songs|أكل(?:ة)?|اكل(?:ة)?|food|favorite|favourite|مفضل(?:ة)?|بتتفرج|بتتابع)/i.test(text);
   if (asksSmokingOrAlcohol(text) && !hasExplicitCasualTopic) return false;
   return hasExplicitCasualTopic || /(?:بتحب|تحب)/i.test(text);
 }
@@ -2702,6 +2702,18 @@ function semanticEgyptianPatientIntent(question: string): PatientQuestionIntent 
   }
 
   if (
+    has(/(?:^|\s)(?:كره|كرة|كوره|كورة|فوتبول|football|soccer|رياضة|رياضه|ماتش|ماتشات|اهلي|أهلي|زمالك|محمد\s*صلاح)(?:\s|$)/) ||
+    has(/بتحب\s+الكور/) ||
+    has(/بتحب\s+الكر/) ||
+    has(/بتشجع\s+مين/) ||
+    has(/بتحب\s+تعمل\s+ايه/) ||
+    has(/وقت\s+فراغ/) ||
+    has(/هوايات/)
+  ) {
+    return 'hobbies';
+  }
+
+  if (
     has(/(?:^|\s)(?:بتشتكي|مضايقك|مالك)(?:\s|$)/) ||
     has(/تعبان\s+من\s+ايه/) ||
     has(/جاي(?:\s+النهارده)?\s+بسبب\s+ايه/)
@@ -2753,7 +2765,8 @@ function messageQuestionParts(message: string): string[] {
     /\s+(?=إزيك|ازيك|عامل(?:ة)?\s*(?:إيه|ايه|أي|eh|eih)|ايه\s*الأخبار|إيه\s*الأخبار)/i,
     /\s+(?=how\s+are\s+you)/i,
     /\s+(?=بتشتكي|تشتكي|شكواك|شكواكي|الحكاية|القصة)/i,
-    /\s+(?=كره|كرة|football)/i,
+    /\s+(?=كره|كرة|كوره|كورة|football|بتحب\s+الكور)/i,
+    /\s+(?=بتحب|بتعمل\s+ايه|وقت\s+فراغ|هوايات)/i,
     /\s+(?=بتاخد|بتاخدي|أدوية|ادوية|دواء|دوا|medication|medicine|drug)/i,
     /\s+(?=عندك\s*ضغط|ضغطك|hypertension|high\s+blood\s+pressure)/i,
     /\s+(?=عندك\s*سكر|diabetes|blood\s+sugar)/i,
@@ -3056,7 +3069,7 @@ function patientHobbiesPhrase(caseData: Case, isArabic: boolean, userMessage = '
   const player = profile.match(/(?:favorite|favourite)\s+(?:football\s+)?player\s*(?:is|:)?\s*([^.;,\n]+)/i) ||
     profile.match(/(?:لاعب(?:ي)?\s+المفضل)\s*(?:هو|:)?\s*([^.;،\n]+)/i);
   if (player?.[1]?.trim() && /لاعب|player|كرة|football|soccer/i.test(lowerQuestion)) {
-    return isArabic ? `لاعب المفضل هو ${player[1].trim()}.` : `My favorite player is ${player[1].trim()}.`;
+    return isArabic ? `لاعبي المفضل هو ${player[1].trim()}.` : `My favorite player is ${player[1].trim()}.`;
   }
 
   const team = profile.match(/(?:favorite|favourite)\s+(?:football\s+)?team\s*(?:is|:)?\s*([^.;,\n]+)/i) ||
@@ -3066,36 +3079,53 @@ function patientHobbiesPhrase(caseData: Case, isArabic: boolean, userMessage = '
   }
 
   if (/لاعب|player/.test(lowerQuestion)) {
-    return isArabic ? 'مليش لاعب مفضل معين.' : 'I do not have a particular favorite player.';
+    return isArabic ? 'بحب محمد صلاح واللاعيبة الحلوة، بس معنديش حد معين مركز معاه.' : 'I like players like Mo Salah, but I do not focus on one specific player.';
   }
   if (/فريق|team/.test(lowerQuestion)) {
-    return isArabic ? 'مش بشجع فريق معين.' : 'I do not support a particular team.';
+    return isArabic ? 'بشجع الأهلي وبحب ماتشات المنتخب.' : 'I support Al Ahly and love the national team matches.';
   }
   if (/football|soccer|كره|كرة/i.test(lowerQuestion)) {
-    if (/football|soccer|كره|كرة/i.test(lowerProfile)) return isArabic ? 'بحب كرة القدم.' : 'I like football.';
     return isArabic
-      ? (female ? 'مش متابعة الكورة أوي بصراحة.' : 'مش متابع الكورة أوي بصراحة.')
-      : 'I do not follow football very closely.';
+      ? (female
+          ? 'آه يا دكتور بحب أتابع ماتشات المنتخب المهمة مع العيلة في البيت.'
+          : 'آه طبعاً يا دكتور بحب الكورة وبحب أتفرج على الماتشات الحلوة مع صحابي، بس مع التعب ده مبقتش قادر أنزل زي الأول.')
+      : 'Yes doctor, I enjoy watching football matches with friends, but with this fatigue I haven\'t been able to go out as much.';
+  }
+
+  if (/شاي|قهوة|tea|coffee|نسكافيه|مشروب/.test(lowerQuestion)) {
+    return isArabic
+      ? 'بشرب كوباية شاي أو قهوة الصبح، بس مش بكتر منهم الحمد لله.'
+      : 'I have a cup of tea or coffee in the morning, but I do not overdo it.';
   }
 
   if (/مسلسلات?|series|movie|movies|film|films|فيلم|افلام|بتتفرج|بتتابع/.test(lowerQuestion)) {
     return isArabic
-      ? (female ? 'مش متابعة المسلسلات والأفلام أوي بصراحة.' : 'مش بتابع المسلسلات والأفلام أوي بصراحة.')
-      : 'I do not follow series or movies very closely.';
+      ? (female
+          ? 'بتفرج على التلفزيون والمسلسلات مع الأسرة لما أكون قاعدة في البيت برتاح.'
+          : 'بتفرج على التلفزيون وماتشات الكورة لما أكون قاعد في البيت برتاح.')
+      : 'I mostly watch TV or series at home when resting.';
   }
   if (/موسيق|اغان(?:ي)?|music|song|songs/.test(lowerQuestion)) {
     return isArabic
-      ? (female ? 'مش متابعة الموسيقى أوي بصراحة.' : 'مش متابع الموسيقى أوي بصراحة.')
-      : 'I do not have a particular music preference.';
+      ? 'بسمع أغاني قديمة وساعات قرآن لما أكون قاعد رايق.'
+      : 'I enjoy listening to some classic music or relaxing at home.';
   }
   if (/أكل(?:ة)?|اكل(?:ة)?|food|favorite|favourite|مفضل(?:ة)?/.test(lowerQuestion)) {
-    return isArabic ? 'معنديش تفضيل معين في الموضوع ده بصراحة.' : 'I do not have a particular preference.';
+    return isArabic ? 'بحب أكل البيت العادي، بس الشهية مش قد كده مع التعب اليومين دول.' : 'I like home-cooked meals, though my appetite is down a bit with this illness.';
   }
-  if (/hobby|hobbies|هواي|interest|رياضة|sport|وقت\s*فراغ|free\s*time/.test(lowerQuestion)) {
-    if (/sport|رياض/i.test(lowerProfile)) return isArabic ? 'بحب الرياضة.' : 'I like sports.';
-    return isArabic ? 'معنديش هواية مفضلة معينة.' : 'I do not have a particular hobby.';
+  if (/hobby|hobbies|هواي|interest|رياضة|sport|وقت\s*فراغ|free\s*time|بتعمل\s*ايه\s*في\s*يومك|يومك\s*بيمشي/.test(lowerQuestion)) {
+    return isArabic
+      ? (female
+          ? 'بقضي وقتي في البيت مع عيلتي وبحاول أرتاح عشان التعب اللي عندي.'
+          : 'بقضي وقت فراغي مع صحابي وعيلتي وبحب أتفرج على التلفزيون وأريح في البيت.')
+      : 'I spend my free time with family and resting at home.';
   }
-  return isArabic ? 'معنديش تفضيل معين في الموضوع ده بصراحة.' : 'I do not have a particular preference.';
+
+  return isArabic
+    ? (female
+        ? 'بحب أقعد مع العيلة وأتفرج على التلفزيون وبحاول أرتاح على قد ما أقدر.'
+        : 'بحب أتفرج على الكورة وأقعد مع صحابي وعيلتي لما بكون مرتاح.')
+    : 'I like spending time with family and watching sports or TV at home.';
 }
 
 function deterministicReplyForIntent(
@@ -3362,10 +3392,18 @@ function buildCohesiveArabicDemographics(
     }
   }
 
-  // 6. Symptoms / Chief Complaint if asked in the same opening turn
+  // 6. Hobbies / Sports / Football if asked in this combined turn
+  if (intents.includes('hobbies')) {
+    const hob = patientHobbiesPhrase(caseData, true, userMessage).replace(/\.$/, '').trim();
+    if (hob) {
+      parts.push(`وبالنسبة للكورة والماتشات، ${hob}.`);
+    }
+  }
+
+  // 7. Symptoms / Chief Complaint if asked in the same opening turn
   if (intents.includes('symptoms')) {
     const comp = patientComplaintPhrase(caseData, true);
-    if (comp) parts.push(`وبالنسبة لسبب زيارتي، ${comp}`);
+    if (comp) parts.push(`وجاي لحضرتك النهارده عشان ${comp}.`);
   }
 
   let result = '';
@@ -3392,10 +3430,10 @@ function deterministicReplyForIntents(
   if (intents.length === 0) return null;
 
   if (isArabic) {
-    const demoIntents = ['name', 'age', 'residence', 'birthPlace', 'occupation', 'marital', 'socialHabits'];
+    const demoIntents = ['name', 'age', 'residence', 'birthPlace', 'occupation', 'marital', 'socialHabits', 'hobbies'];
     const activeDemos = intents.filter((intent) => demoIntents.includes(intent));
     const hasGreeting = intents.includes('greeting');
-    if ((hasGreeting && activeDemos.length >= 1) || activeDemos.length >= 2) {
+    if ((hasGreeting && activeDemos.length >= 1) || activeDemos.length >= 2 || (intents.length >= 2)) {
       return buildCohesiveArabicDemographics(caseData, intents, userMessage);
     }
   }
